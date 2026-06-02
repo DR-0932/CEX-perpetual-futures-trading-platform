@@ -1,32 +1,144 @@
 import type { Request,Response } from "express";
 import { prisma } from '@cex/db'
+import { redis } from '@cex/redis'
 
 
+//types to be put in /packages/types and exported from there
 type onRamp = {
     userId:string,
     amount:bigint,
 
 }
 
+type orderType={
+    userId:string,
+    price:bigint,
+    symbol:string,
+    market_id:string,
+    leverage:bigint,
+    side: "LONG" | "SHORT",
+    type: "MARKET" | "LIMIT",
+    quantity:bigint,
+    createdAt:Date 
+}
 
-async function on_ramp(on_ramp_data:onRamp):Promise<void>{
+type OrderStatus = {
+  OPEN: 'OPEN',
+  FILLED: 'FILLED',
+  PARTIALLY_FILLED: 'PARTIALLY_FILLED',
+  CANCELLED: 'CANCELLED'
+} 
+
+
+/**----adding money to account wallet---- */
+export async function on_ramp(on_ramp_data:onRamp,res:Response):Promise<void>{
     const {userId,amount} = on_ramp_data
 
     const cltrl = await prisma.collateral.findFirst({
         where:{userId}
     })
     if(!cltrl){
-        throw new Error("Record not found or Unable to access database")
+        res.status(400).json({error:"Unable to reach database"})
         return
     }
     const new_total = cltrl?.available +amount
+    try{
+
+        await prisma.collateral.create({
+            data:{
+                userId,
+                total:new_total,
+                available:amount,
+            }
+        })
+    }catch(error){
+        res.status(400).json({error:"unable to add balance"})
+    }
+
+}
+
+
+/**----creating a new order---- */
+export async function create_orders(order:orderType,res:Response):Promise<void>{
+    const data = order
+    if(!data){
+        res.status(404).json({error:"no data recieved"})
+    }
+    const {userId,symbol,market_id,price,leverage,side,type,quantity} =data
+
+    /**----calculating margin---- */
+    const required_margin = (price*quantity)/leverage
     
-    await prisma.collateral.create({
+    /**----updating amount to locked---- */
+    await prisma.collateral.update({
+        where:{id:userId},
         data:{
-            userId,
-            total:new_total,
-            available:amount,
+            available: { decrement: BigInt(required_margin)},
+            locked:    { increment: BigInt(required_margin)}
+        }
+    })
+    
+    /**----db call creating order---- */
+    const post_order = await prisma.orders.create({
+        data:{
+            user_id:userId,
+            price:BigInt(price),
+            market_id,
+            symbol,
+            margin:required_margin,
+            side,
+            type,
+            quantity:BigInt(quantity),
+            created_at:new Date(),
+            leverage,
         }
     })
 
+    /**----redis stream: adding limit order ---- */
+    if(type==="LIMIT"){
+        //redis calll
+        await redis.xadd(
+            "orders",    "*",
+            "action",    "NEW_LIMIT_ORDER",   
+            
+            "userId",    String(userId),
+            
+            "margin",    String(required_margin),
+            "leverage",  String(leverage),
+            "side",      String(side),
+            "price",     String(price),
+            "quantity",  String(quantity),
+            
+            "createdAt", String(order.createdAt.getTime()),
+        )
+    }
+
+
+    /**----posting market order and geting market price---- */
+    if(type==="MARKET"){
+            await redis.xadd(
+            "orders",    "*",
+            "action",    "NEW_MARKET_ORDER",   
+            
+            "userId",    String(userId),
+            
+            "margin",    String(required_margin),
+            "leverage",  String(leverage),
+            "side",      String(side),
+            "price",     String(price),
+            "quantity",  String(quantity),
+            
+            "createdAt", String(order.createdAt.getTime()),
+        )
+    }
+    
 }
+
+
+//cancel order
+
+//remove/exit position
+
+//check balance/get collateral: available && locked
+
+//

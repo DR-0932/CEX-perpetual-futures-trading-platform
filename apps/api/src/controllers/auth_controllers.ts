@@ -2,10 +2,7 @@ import type {Request,Response} from "express"
 import { prisma } from '@cex/db'
 import bcrypt from 'bcrypt'
 
-
 const jwt_secret = "topSecret"
-
-
 
 export async function signup(req:Request,res:Response):Promise<void>{
     const parsedBody = req.body;  //add zod
@@ -36,3 +33,14 @@ export async function signup(req:Request,res:Response):Promise<void>{
     }
 }
 
+
+export async function signin(req:Request,res:Response):Promise<void>{
+    const parsedBody = req.body;  //add zod
+    if(!parsedBody.success) {
+        res.status(400).json({error:parsedBody.error})
+        return
+    }
+    
+    const {username,password} = parsedBody.data; 
+
+}

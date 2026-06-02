@@ -36,21 +36,34 @@ model User{
   username    String
   password    String
   email       String
+ 
 
   orders      Orders[]
   fills       Fills[]
+  collateral  Collateral[]
+}
+
+model Collateral {
+  id            String        @id @default(uuid())
+  total         BigInt
+  available     BigInt
+  locked        BigInt?
+
+  userId      String
+  user        User    @relation(fields: [userId],references: [id])
 }
 
 model Orders{
   id          String        @id @default(uuid())
 
-  price       String
+  price       BigInt
   
   symbol      String
   market_id   String
 
   margin      BigInt
   leverage    BigInt
+  
   side        Side     
   type        Type
 
@@ -93,7 +106,7 @@ model Fills{
   type        Type
   quantity    BigInt
   PnL         BigInt
-
+  //maker,taker id based on long/short
   user_id   String
   user      User        @relation(fields: [user_id],references: [id])
 }
