@@ -57,7 +57,6 @@ export async function on_ramp(on_ramp_data:onRamp,res:Response):Promise<void>{
 
 }
 
-
 /**----creating a new order---- */
 export async function create_orders(order:orderType,res:Response):Promise<void>{
     const data = order
@@ -91,6 +90,8 @@ export async function create_orders(order:orderType,res:Response):Promise<void>{
             quantity:BigInt(quantity),
             created_at:new Date(),
             leverage,
+            status:"OPEN",
+            filled_qty:0n,
         }
     })
 
@@ -134,8 +135,59 @@ export async function create_orders(order:orderType,res:Response):Promise<void>{
     
 }
 
-
 //cancel order
+export async function cancel_order(req: Request,res:Response):Promise<void>{
+    const userId = req.userId //will come from authmiddleware once i add it
+
+    const order =await prisma.orders.findFirst({
+        where:{id:userId},
+    })
+    
+    if (!order) {
+        res.status(404).json({ error: "Order not found" })
+        return
+    }
+    
+    if (order.status !== "OPEN") {
+        res.status(400).json({ error: "Only OPEN orders can be cancelled" })
+        return
+    } 
+
+    /**db call to set order as closed */
+    if( order.filled_qty === 0n ){
+        try{
+            await prisma.orders.update({
+                where:{id:userId},
+                data:{status:"CLOSED"}
+            })
+            res.status(200).json({message:"order closed successfully"})
+        }catch(e){
+            res.status(400).json({error:"order cancelled"})
+        }
+    }else{
+        /**db call is order is partially_filled */
+        const remaining_qty = order.quantity-order.filled_qty;
+        const update_order = await prisma.orders.update({
+            where:{id:userId},
+            data:{
+                status:"PARTIALLY_FILLED",
+                quantity:remaining_qty
+            }
+        })
+        if(!update_order){
+            res.status(400).json({error:"could not cancel order try again"})
+        }
+
+        /**unlocking the locked margin according to qty yet to be filled */
+        const unlock_margin = (remaining_qty*order.price)/order.leverage
+        
+        
+    }
+
+
+    
+    //logic to unlock margins
+}   
 
 //remove/exit position
 
