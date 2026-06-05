@@ -1,8 +1,8 @@
 import type {Request,Response} from "express"
 import { prisma } from '@cex/db'
 import bcrypt from 'bcrypt'
+import jwt from 'jsonwebtoken'
 
-const jwt_secret = "topSecret"
 
 export async function signup(req:Request,res:Response):Promise<void>{
     const parsedBody = req.body;  //add zod
@@ -23,7 +23,8 @@ export async function signup(req:Request,res:Response):Promise<void>{
                 email   
             }
             })
-
+        
+        
         res.status(201).json({
             message:"user registered successfully",
             userId:user.id
@@ -42,5 +43,23 @@ export async function signin(req:Request,res:Response):Promise<void>{
     }
     
     const {username,password} = parsedBody.data; 
+    
+    try{
+        const user = await prisma.user.findUnique({
+            where:{username}
+        })
+        if(!user){
+            res.status(401).json({error:"user not found"})
+            return
+        }
+        
+        const password_match   =  bcrypt.compare(password,user?.password)
+        if(!password_match){
+            res.status(401).json({error:"invalid password or username"})
+        }
+    
+        const token = jwt.sign({user:user.id},process.env.JWT_SECRET!) //used ! here,correct it
+    }
+    
 
 }
