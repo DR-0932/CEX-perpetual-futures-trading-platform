@@ -32,18 +32,17 @@ type OrderStatus = {
 
 /**----adding money to account wallet---- */
 export async function on_ramp(req:Request,res:Response):Promise<void>{
+   
     const {userId,amount} = req.body as onRamp
+    const cltrl = await prisma.collateral.findFirst({where:{userId}})
 
-    const cltrl = await prisma.collateral.findFirst({
-        where:{userId}
-    })
     if(!cltrl){
         res.status(400).json({error:"Unable to reach database"})
         return
     }
+
     const new_total = cltrl?.available +amount
     try{
-
         await prisma.collateral.create({
             data:{
                 userId,
@@ -51,6 +50,7 @@ export async function on_ramp(req:Request,res:Response):Promise<void>{
                 available:amount,
             }
         })
+        
     }catch(error){
         res.status(400).json({error:"unable to add balance"})
     }
