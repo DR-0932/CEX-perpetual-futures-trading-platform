@@ -12,6 +12,7 @@
   "type": "module",
   "dependencies": {
     "@cex/redis": "workspace:*",
-    "@cex/types": "workspace:*"
+    "@cex/types": "workspace:*",
+    "sorted-btree": "^2.1.0"
   }
 }
