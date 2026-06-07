@@ -10,10 +10,10 @@ app.use("/auth",authRouter);
 app.use("/exchange",exchangeRouter)
 
 async function initRedis(){
-    try{
-        await redis.xgroup("CREATE","orders","engine_group","$","MKSTREAM")
+    try{                   //action //redis_key //grp_name   //start_id //optnl      
+        await redis.xgroup("CREATE", "orders" , "engine_group" , "$" , "MKSTREAM")
     }catch(e:any){
-        if(!e.message.include("BUSYGROUP")) throw e
+        if(!e.message.includes("BUSYGROUP")) throw e
     }
 }
 
