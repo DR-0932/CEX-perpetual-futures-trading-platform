@@ -31,8 +31,8 @@ type OrderStatus = {
 
 
 /**----adding money to account wallet---- */
-export async function on_ramp(on_ramp_data:onRamp,res:Response):Promise<void>{
-    const {userId,amount} = on_ramp_data
+export async function on_ramp(req:Request,res:Response):Promise<void>{
+    const {userId,amount} = req.body as onRamp
 
     const cltrl = await prisma.collateral.findFirst({
         where:{userId}
@@ -58,84 +58,90 @@ export async function on_ramp(on_ramp_data:onRamp,res:Response):Promise<void>{
 }
 
 /**----creating a new order---- */
-export async function create_orders(order:orderType,res:Response):Promise<void>{
-    const data = order
+export async function create_orders(req:Request,res:Response):Promise<void>{
+    const data = req.body as orderType
     if(!data){
         res.status(404).json({error:"no data recieved"})
     }
-    const {userId,symbol,market_id,price,leverage,side,type,quantity} =data
+    try{
 
-    /**----calculating margin---- */
-    const required_margin = (price*quantity)/leverage
-    
-    /**----updating amount to locked---- */
-    await prisma.collateral.update({
-        where:{id:userId},
-        data:{
-            available: { decrement: BigInt(required_margin)},
-            locked:    { increment: BigInt(required_margin)}
-        }
-    })
-    
-    /**----db call creating order---- */
-    const post_order = await prisma.orders.create({
-        data:{
-            user_id:userId,
-            price:BigInt(price),
-            market_id,
-            symbol,
-            margin:required_margin,
-            side,
-            type,
-            quantity:BigInt(quantity),
-            created_at:new Date(),
-            leverage,
-            status:"OPEN",
-            filled_qty:0n,
-        }
-    })
-
-    /**----redis stream: adding limit order ---- */
-    if(type==="LIMIT"){
-        //redis calll
-        await redis.xadd(
-            "orders",    "*",
-            "action",    "NEW_LIMIT_ORDER",   
-            
-            "userId",    String(userId),
-            
-            "margin",    String(required_margin),
-            "leverage",  String(leverage),
-            "side",      String(side),
-            "price",     String(price),
-            "quantity",  String(quantity),
-            
-            "createdAt", String(order.createdAt.getTime()),
-        )
-    }
-
-
-    /**----posting market order and geting market price---- */
-    if(type==="MARKET"){
+        const {userId,symbol,market_id,price,leverage,side,type,quantity} =data
+        
+        /**----calculating margin---- */
+        const required_margin = (price*quantity)/leverage
+        
+        /**----updating amount to locked---- */
+        await prisma.collateral.update({
+            where:{id:userId},
+            data:{
+                available: { decrement: BigInt(required_margin)},
+                locked:    { increment: BigInt(required_margin)}
+            }
+        })
+        
+        /**----db call creating order---- */
+        const post_order = await prisma.orders.create({
+            data:{
+                user_id:userId,
+                price:BigInt(price),
+                market_id,
+                symbol,
+                margin:required_margin,
+                side,
+                type,
+                quantity:BigInt(quantity),
+                created_at:new Date(),
+                leverage,
+                status:"OPEN",
+                filled_qty:0n,
+            }
+        })
+        
+        /**----redis stream: adding limit order ---- */
+        if(type==="LIMIT"){
+            //redis calll
             await redis.xadd(
-            "orders",    "*",
-            "action",    "NEW_MARKET_ORDER",   
-            
-            "userId",    String(userId),
-            
-            "margin",    String(required_margin),
-            "leverage",  String(leverage),
-            "side",      String(side),
-            "price",     String(price),
-            "quantity",  String(quantity),
-            
-            "createdAt", String(order.createdAt.getTime()),
-        )
+                "orders",    "*",
+                "action",    "NEW_LIMIT_ORDER",   
+                
+                "userId",    String(userId),
+                
+                "margin",    String(required_margin),
+                "leverage",  String(leverage),
+                "side",      String(side),
+                "price",     String(price),
+                "quantity",  String(quantity),
+                
+                "createdAt", String(data.createdAt.getTime()),
+            )
+        }
+        
+        
+        /**----posting market order and geting market price---- */
+        if(type==="MARKET"){
+            await redis.xadd(
+                "orders",    "*",
+                "action",    "NEW_MARKET_ORDER",   
+                
+                "userId",    String(userId),
+                
+                "margin",    String(required_margin),
+                "leverage",  String(leverage),
+                "side",      String(side),
+                "price",     String(price),
+                "quantity",  String(quantity),
+                
+                "createdAt", String(data.createdAt.getTime()),
+            )
+        }
+        }catch(e){
+            console.error("create orders error:",e);
+            res.status(500).json({error:"internal server error"});
+        }
+        
     }
     
-}
-
-//cancel order
+    //cancel order
 export async function cancel_order(req: Request,res:Response):Promise<void>{
     const userId = req.userId //will come from authmiddleware once i add it
 
