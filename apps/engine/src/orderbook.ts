@@ -1,4 +1,3 @@
-
 export type Order = {
     id:string,
     userId:string,
@@ -18,6 +17,7 @@ export type Order = {
 type price_level = Map<string,Order>
 
 export type Orderbook = {
+    //need to BTree but throwing error for somereason
     bids: Map<bigint,price_level>
     asks: Map<bigint,price_level>
     seq: number
@@ -53,7 +53,7 @@ export function removeOrder(book:Orderbook,orderId:string){
     const map = entry.side ==="LONG"
     ? book.bids 
     : book.asks
-
+ 
     const level = map.get(entry.price)
     if(!level) return
     level.delete(orderId)
@@ -77,11 +77,15 @@ export function bestAsk(book: Orderbook): Order | undefined {
 export function updateOrderQty(book: Orderbook, orderId: string, newQty: bigint) {
     const entry = book.orderIndex.get(orderId)
     if (!entry) return
+    
     const map = entry.side === "LONG" ? book.bids : book.asks
+    
     const level = map.get(entry.price)
     if (!level) return
+    
     const order = level.get(orderId)
     if (!order) return
+    
     order.quantity = newQty
     book.seq++
 }
