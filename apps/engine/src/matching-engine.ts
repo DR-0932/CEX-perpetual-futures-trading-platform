@@ -10,6 +10,13 @@ interface fillResult {
     remaining_ask_qty: bigint   
     fill_bid_margin: bigint   
     fill_ask_margin: bigint 
+    bid_orderID:    string
+    ask_orderID:    string
+}
+
+interface fillResultWithOrders extends fillResult {
+    bidOrder: Order
+    askOrder: Order
 }
 
 export  function calculateFill(bestBid:Order,bestAsk:Order) {
@@ -41,7 +48,10 @@ export  function calculateFill(bestBid:Order,bestAsk:Order) {
         fill_ask_margin,
         fill_bid_margin,
         bid_fully_filled,
-        ask_fully_filled
+        ask_fully_filled,
+        ask_orderID,
+        bid_orderID
+
     }
 }
 
@@ -59,22 +69,25 @@ export async function updateOrderbook(book:Orderbook,bestBid:Order,bestAsk:Order
     }
 }
 
-export async function match_orders(market:string):Promise<void> {
+export async function match_orders(market:string):Promise<fillResult[]> {
     const book  = orderbooks.get(market)
-    if(!book) return
+    if(!book){
+      return []
+    } 
 
-
+    const fills: fillResultWithOrders[] = []
 
     while(true){
         const best_bid = bestBid(book)
         const best_ask =bestAsk(book)
 
         if(!best_ask ||!best_bid) break
-        if(best_bid >best_ask) break
+        if(best_bid.price <best_ask.price) break
 
         const fill = calculateFill(best_bid,best_ask)
-        updateOrderbook(book,best_bid,best_ask,fill)
-        
+        await updateOrderbook(book,best_bid,best_ask,fill)
+        fills.push({ ...fill, bidOrder: best_bid, askOrder: best_ask }) 
+
         await (redis as any).xadd(
             "fills", "*",
             "fill_price", String(fill.fill_price),
@@ -82,8 +95,8 @@ export async function match_orders(market:string):Promise<void> {
             
             "market",    market,
             
-            "bid_orderId",     String(best_bid.id),
-            "ask_orderId",     String(best_ask.id),
+            "bid_orderId",          String(best_bid.id),
+            "ask_orderId",          String(best_ask.id),
 
             "remaining_bid_qty",    String(fill.remaining_bid_qty),
             "remaining_ask_qty",     String(fill.remaining_ask_qty),
@@ -97,7 +110,11 @@ export async function match_orders(market:string):Promise<void> {
             "bid_leverage",         String(best_bid.leverage),
             "ask_leverage",         String(best_ask.leverage),
 
+            "bid_orderID",          String(fill.bid_orderID),
+            "ask_orderID",          String(fill.ask_orderID),
+
             "timestamp",            String(Date.now())
         )
     }
+    return fills
 }
