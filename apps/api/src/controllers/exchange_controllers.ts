@@ -34,7 +34,13 @@ type OrderStatus = {
 export async function on_ramp(req:Request,res:Response):Promise<void>{
    
     const {userId,amount} = req.body as onRamp
-    const cltrl = await prisma.collateral.findFirst({where:{userId}})
+    const cltrl = await prisma.collateral.update({
+        where:{userId},
+        data:{
+            total:  {increment:amount},
+            available:  {increment:amount}
+            }
+        })
 
     if(!cltrl){
         res.status(400).json({error:"Unable to reach database"})
@@ -54,7 +60,6 @@ export async function on_ramp(req:Request,res:Response):Promise<void>{
     }catch(error){
         res.status(400).json({error:"unable to add balance"})
     }
-
 }
 
 /**----creating a new order---- */
@@ -66,7 +71,6 @@ export async function create_orders(req:Request,res:Response):Promise<void>{
     try{
 
         const {userId,symbol,market_id,price,leverage,side,type,quantity} =data
-        
         /**----calculating margin---- */
         const required_margin = (price*quantity)/leverage
         
@@ -116,7 +120,6 @@ export async function create_orders(req:Request,res:Response):Promise<void>{
             )
         }
         
-        
         /**----posting market order and geting market price---- */
         if(type==="MARKET"){
             await redis.xadd(
@@ -138,7 +141,6 @@ export async function create_orders(req:Request,res:Response):Promise<void>{
             console.error("create orders error:",e);
             res.status(500).json({error:"internal server error"});
         }
-        
     }
     
     //cancel order
@@ -180,14 +182,13 @@ export async function cancel_order(req: Request,res:Response):Promise<void>{
                 quantity:remaining_qty
             }
         })
+        
         if(!update_order){
             res.status(400).json({error:"could not cancel order try again"})
         }
 
         /**unlocking the locked margin according to qty yet to be filled */
-        const unlock_margin = (remaining_qty*order.price)/order.leverage
-        
-        
+        const unlock_margin = (remaining_qty*order.price)/order.leverage 
     }
 
 
