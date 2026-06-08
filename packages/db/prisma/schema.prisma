@@ -39,7 +39,8 @@ model User{
  
 
   orders      Orders[]
-  fills       Fills[]
+  bidFills    Fills[]      @relation("BidFills")
+  askFills    Fills[]      @relation("AskFills")
   collateral  Collateral[]
 }
 
@@ -49,7 +50,7 @@ model Collateral {
   available     BigInt
   locked        BigInt?
 
-  userId      String
+  userId      String          @unique
   user        User    @relation(fields: [userId],references: [id])
 }
 
@@ -99,16 +100,41 @@ model Positions{
 }
 
 
-model Fills{
-  id        String        @id @default(uuid())
+model Fills {
+    id              String      @id @default(uuid())
 
-  order_id    String
-  market_id   String
-  side        Side
-  type        Type
-  quantity    BigInt
-  PnL         BigInt
-  //maker,taker id based on long/short
-  user_id   String
-  user      User        @relation(fields: [user_id],references: [id])
+    // market info
+    market          String
+    price           BigInt
+    quantity        BigInt
+
+    // which orders were matched
+    bidOrderId      String
+    askOrderId      String
+
+    // who were the traders
+    bidUserId       String
+    askUserId       String
+
+    // margin used by each side
+    bidMargin       BigInt
+    askMargin       BigInt
+
+    // who was maker/taker
+    bidRole         String      // "MAKER" | "TAKER"
+    askRole         String      // "MAKER" | "TAKER"
+
+    // remaining qty after fill
+    remainingBidQty BigInt
+    remainingAskQty BigInt
+
+    // leverage used
+    bidLeverage     BigInt
+    askLeverage     BigInt
+
+    createdAt       DateTime    @default(now())
+
+    // relations
+    bidUser         User        @relation("BidFills", fields: [bidUserId], references: [id])
+    askUser         User        @relation("AskFills", fields: [askUserId], references: [id])
 }
