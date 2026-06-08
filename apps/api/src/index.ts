@@ -16,6 +16,12 @@ async function initRedis(){
     }catch(e:any){
         if(!e.message.includes("BUSYGROUP")) throw e
     }
+
+    try{
+        await redis.xgroup("CREATE","FILLS","api_group","$","MKSTREAM")
+    }catch(e:any){
+        if(!e.message.includes("BUSYGROUP")) throw e
+    }
 }
 
 async function main(){
