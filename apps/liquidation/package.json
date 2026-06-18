@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "bun run --watch src/index.ts"
   },
   "keywords": [],
   "author": "",
@@ -13,6 +13,10 @@
   "dependencies": {
     "@cex/db": "workspace:*",
     "@cex/redis": "workspace:*",
-    "@cex/types": "workspace:*"
+    "@cex/types": "workspace:*",
+    "ws": "^8.21.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.1"
   }
 }
