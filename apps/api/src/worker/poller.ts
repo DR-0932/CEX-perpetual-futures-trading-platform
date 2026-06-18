@@ -20,7 +20,7 @@ async function processFill(messageId:string,rawFields:string[]) {
             bidMargin:       BigInt(data.filled_bid_margin),
             askMargin:       BigInt(data.filled_ask_margin),
             bidRole:         data.bid_role,          
-            askRole:         data.ask_role,          
+            askRole:         data.ask_role,           
             remainingBidQty: BigInt(data.remaining_bid_qty),  
             remainingAskQty: BigInt(data.remaining_ask_qty),  
             bidLeverage:     BigInt(data.bid_leverage),       
