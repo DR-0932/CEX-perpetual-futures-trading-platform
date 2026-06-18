@@ -9,6 +9,7 @@ app.use(express.json());
 app.use("/auth",authRouter);
 app.use("/exchange",exchangeRouter)
 
+
 async function initRedis(){
     
     try{                   //action //redis_key //grp_name   //start_id //optnl      
