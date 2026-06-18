@@ -10,8 +10,8 @@ interface fillResult {
     remaining_ask_qty: bigint   
     fill_bid_margin: bigint   
     fill_ask_margin: bigint 
-    bid_orderID:    string
-    ask_orderID:    string
+    bidOrderID:    string
+    askOrderID:    string
 }
 
 interface fillResultWithOrders extends fillResult {
@@ -49,8 +49,8 @@ export  function calculateFill(bestBid:Order,bestAsk:Order) {
         fill_bid_margin,
         bid_fully_filled,
         ask_fully_filled,
-        ask_orderID,
-        bid_orderID
+        askOrderID,//need to fix this.
+        bidOrderID
 
     }
 }
