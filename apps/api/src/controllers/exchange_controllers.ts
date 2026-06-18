@@ -34,32 +34,25 @@ type OrderStatus = {
 export async function on_ramp(req:Request,res:Response):Promise<void>{
    
     const {userId,amount} = req.body as onRamp
-    const cltrl = await prisma.collateral.update({
-        where:{userId},
-        data:{
-            total:  {increment:amount},
-            available:  {increment:amount}
-            }
-        })
-
-    if(!cltrl){
-        res.status(400).json({error:"Unable to reach database"})
-        return
-    }
-
-    const new_total = cltrl?.available +amount
     try{
-        await prisma.collateral.create({
-            data:{
+        await prisma.collateral.upsert({
+            where:{userId},
+            update:{
+                total:  {increment:amount},
+                available:  {increment:amount}
+            },
+            create: {
                 userId,
-                total:new_total,
-                available:amount,
+                total: amount,
+                available: amount,
+                locked: 0n
             }
         })
-        
-    }catch(error){
-        res.status(400).json({error:"unable to add balance"})
+        res.status(200).json({message:"balance added"})
+    }catch(e){
+        res.status(400).json({error:"Unable to update collateral",e})
     }
+
 }
 
 /**----creating a new order---- */
@@ -69,9 +62,9 @@ export async function create_orders(req:Request,res:Response):Promise<void>{
         res.status(404).json({error:"no data recieved"})
     }
     try{
-
         const {userId,symbol,market_id,price,leverage,side,type,quantity} =data
-        /**----calculating margin---- */
+
+            /**----calculating margin---- */
         const required_margin = (price*quantity)/leverage
         
         /**----updating amount to locked---- */
@@ -84,7 +77,7 @@ export async function create_orders(req:Request,res:Response):Promise<void>{
         })
         
         /**----db call creating order---- */
-        const post_order = await prisma.orders.create({
+        await prisma.orders.create({
             data:{
                 user_id:userId,
                 price:BigInt(price),
@@ -102,53 +95,43 @@ export async function create_orders(req:Request,res:Response):Promise<void>{
         })
         
         /**----redis stream: adding limit order ---- */
-        if(type==="LIMIT"){
-            //redis calll
-            await redis.xadd(
-                "orders",    "*",
-                "action",    "NEW_LIMIT_ORDER",   
-                
-                "userId",    String(userId),
-                
-                "margin",    String(required_margin),
-                "leverage",  String(leverage),
-                "side",      String(side),
-                "price",     String(price),
-                "quantity",  String(quantity),
-                
-                "createdAt", String(data.createdAt.getTime()),
-            )
+        await redis.xadd(
+            "orders",    "*",
+            "action",    "NEW_LIMIT_ORDER",   
+            
+            "userId",    String(userId),
+            "market_id", market_id,
+            
+            "margin",    String(required_margin),
+            "leverage",  String(leverage),
+            "side",      String(side),
+            "price",     String(price),
+            "quantity",  String(quantity),
+            "type",      type,
+            "filled_qty", 0,
+            
+            "createdAt", String(data.createdAt.getTime()),
+        )
+
+        const reply = await redis.blpop(`replies:${/**post order id */}`,10)
+        if(!reply){
+            res.status(408).json({error:"engine timeout"})
+            return
         }
-        
-        /**----posting market order and geting market price---- */
-        if(type==="MARKET"){
-            await redis.xadd(
-                "orders",    "*",
-                "action",    "NEW_MARKET_ORDER",   
-                
-                "userId",    String(userId),
-                
-                "margin",    String(required_margin),
-                "leverage",  String(leverage),
-                "side",      String(side),
-                "price",     String(price),
-                "quantity",  String(quantity),
-                
-                "createdAt", String(data.createdAt.getTime()),
-            )
-        }
-        }catch(e){
-            console.error("create orders error:",e);
-            res.status(500).json({error:"internal server error"});
-        }
+        res.json(JSON.parse(reply[1]))
+
+    }catch(e){
+        console.error("create orders error:",e);
+        res.status(500).json({error:"internal server error"});
     }
+}
     
     //cancel order
 export async function cancel_order(req: Request,res:Response):Promise<void>{
     const userId = req.userId //will come from authmiddleware once i add it
-
+    const orderId = req.params;
     const order =await prisma.orders.findFirst({
-        where:{id:userId},
+        where:{id:orderId},
     })
     
     if (!order) {
@@ -164,22 +147,25 @@ export async function cancel_order(req: Request,res:Response):Promise<void>{
     /**db call to set order as closed */
     if( order.filled_qty === 0n ){
         try{
+            
             await prisma.orders.update({
-                where:{id:userId},
-                data:{status:"CLOSED"}
+                where: { id: orderId },
+                data: { status: "CLOSED" }
             })
             res.status(200).json({message:"order closed successfully"})
+        
         }catch(e){
             res.status(400).json({error:"order cancelled"})
         }
     }else{
         /**db call is order is partially_filled */
         const remaining_qty = order.quantity-order.filled_qty;
+        
         const update_order = await prisma.orders.update({
-            where:{id:userId},
-            data:{
-                status:"PARTIALLY_FILLED",
-                quantity:remaining_qty
+            where: { id: orderId},
+            data: {
+                status: "PARTIALLY_FILLED",
+                quantity: remaining_qty
             }
         })
         
@@ -191,8 +177,6 @@ export async function cancel_order(req: Request,res:Response):Promise<void>{
         const unlock_margin = (remaining_qty*order.price)/order.leverage 
     }
 
-
-    
     //logic to unlock margins
 }   
 
