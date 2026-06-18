@@ -27,6 +27,7 @@ enum Status {
   CLOSED
   PARTIALLY_FILLED
   FAILED
+  LIQUIDATED
 }
 
 
