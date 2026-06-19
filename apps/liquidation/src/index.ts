@@ -10,13 +10,52 @@
 
 */
 
+import { check_and_liqudate } from "./liquidation.js";
 import { start_markprice_stream } from "./markprice.js";
-import { redis } from "@cex/redis"
+import { redis, STREAM } from "@cex/redis"
 
-async function main() {
-    console.log("liquidation main function running");
+async function initRedis(){
+    try {
+        await redis.xgroup("CREATE","markPrice","liq_group","$","MKSTREAM")
+    }catch(e:any) {
+        if(!e.message.includes("BUSYGROUP")) throw e
+    }
 
-    const pending =await redis.xreadgroup(
-        ""
-    )
+    try {
+        await redis.xgroup("CREATE","markprice","liq_group","$",'MKSTREAM')
+    }catch(e:any){
+        if(!e.message.includes("BUSYGROUP")) throw e
+    }
 }
+
+async function process_prices() {
+    while( true ) {
+        const result  = await redis.xreadgroup(
+            
+            "GROUP",    "liq_group",    "liq_worker",
+            
+            "COUNT",    "1",
+            
+            "BLOCK",    "0",
+            
+            "STREAMS",  "markprice",    ">"
+        ) as [string,[string[]][][]]
+        
+        if(!result) continue;
+
+        const [messageId, rawfields] = result[0][1][0]
+
+        const data: Record<string,string> = {}
+
+        for( let i = 0; i<rawfields.length; i +=2){
+            data[rawfields[i]] = rawfields[i+1]
+        }
+
+        await check_and_liqudate(
+            data.symbol,
+            BigInt(Math.floor(parseFloat(data.price)*100))
+        )
+        await redis.xack("markprice","liq_group",messageId)
+    }
+}
+
