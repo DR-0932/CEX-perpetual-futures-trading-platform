@@ -28,9 +28,9 @@ async function processMessage(messageId:string,rawFields:string[]){
     if(!book){
         await redis.xack("orders","engine_group",messageId)
         return
-    }
+    }  
 
-    const order = parseOrder(orderData)
+    const order =  parseOrder(orderData)
     create_order(book,order)
     await match_orders(orderData.market)
 
@@ -44,6 +44,9 @@ async function processMessage(messageId:string,rawFields:string[]){
     await redis.xack( "orders","engine_group",messageId )
 }
 
+async function matching_engine_to_liquidation_worker_stream() {
+    await redis.xgroup('CREATE','POSITIONS',)
+}
 
 async function main() {
     
@@ -82,6 +85,8 @@ async function main() {
         const [messageId,rawfields] = result[0][1][0]
         await processMessage(messageId,rawfields)
     }
+
+
 }
 
 main().catch(console.error)
