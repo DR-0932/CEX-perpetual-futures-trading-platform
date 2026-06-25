@@ -43,6 +43,7 @@ model User{
   bidFills    Fills[]      @relation("BidFills")
   askFills    Fills[]      @relation("AskFills")
   collateral  Collateral[]
+  position    Positions[]
 }
 
 model Collateral {
@@ -83,13 +84,13 @@ model Orders{
 model Positions{
   id                        String        @id @default(uuid())
 
-  entry_price               String
+  entry_price               BigInt
 
   symbol                    String
   market_id                 String
 
-  inital_margin             BigInt
-  Liquidation_price         BigInt
+  initial_margin             BigInt
+  liquidation_price         BigInt
   leverage                  BigInt
   side                      Side     
   type                      Type
@@ -98,6 +99,9 @@ model Positions{
   PnL                       BigInt
 
   created_at                DateTime      @default(now())
+
+  userId    String
+  user      User          @relation(fields: [userId],references: [id])
 }
 
 
