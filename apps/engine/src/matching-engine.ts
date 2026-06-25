@@ -1,3 +1,4 @@
+import { calculate_liquidation_price } from "./liquidation.js";
 import { Order, Orderbook, orderbooks, removeOrder, updateOrderQty,bestAsk,bestBid } from "./orderbook.js";
 import { redis } from "@cex/redis";
 
@@ -8,10 +9,10 @@ interface fillResult {
     ask_fully_filled:  boolean
     remaining_bid_qty: bigint   
     remaining_ask_qty: bigint   
-    fill_bid_margin: bigint   
-    fill_ask_margin: bigint 
-    bidOrderID:    string
-    askOrderID:    string
+    fill_bid_margin:   bigint   
+    fill_ask_margin:   bigint 
+    bidOrderID:        string
+    askOrderID:        string
 }
 
 interface fillResultWithOrders extends fillResult {
@@ -49,8 +50,8 @@ export  function calculateFill(bestBid:Order,bestAsk:Order) {
         fill_bid_margin,
         bid_fully_filled,
         ask_fully_filled,
-        askOrderID,//need to fix this.
-        bidOrderID
+        askOrderID:bestAsk.id,//need to fix this.
+        bidOrderID:bestBid.id
 
     }
 }
@@ -90,16 +91,16 @@ export async function match_orders(market:string):Promise<fillResult[]> {
 
         await (redis as any).xadd(
             "fills", "*",
-            "fill_price", String(fill.fill_price),
-            "fill_qty",   String(fill.fill_qty),
+            "fill_price",           String(fill.fill_price),
+            "fill_qty",             String(fill.fill_qty),
             
-            "market",    market,
+            "market",               market,
             
             "bid_orderId",          String(best_bid.id),
             "ask_orderId",          String(best_ask.id),
 
             "remaining_bid_qty",    String(fill.remaining_bid_qty),
-            "remaining_ask_qty",     String(fill.remaining_ask_qty),
+            "remaining_ask_qty",    String(fill.remaining_ask_qty),
 
             "filled_bid_margin",    String(fill.fill_bid_margin),
             "filled_ask_margin",    String(fill.fill_ask_margin),
@@ -110,11 +111,32 @@ export async function match_orders(market:string):Promise<fillResult[]> {
             "bid_leverage",         String(best_bid.leverage),
             "ask_leverage",         String(best_ask.leverage),
 
-            "bid_orderID",          String(fill.bid_orderID),
-            "ask_orderID",          String(fill.ask_orderID),
+            "bid_orderID",          String(fill.bidOrderID),
+            "ask_orderID",          String(fill.askOrderID),
 
             "timestamp",            String(Date.now())
         )
+
+        const sides = [
+            { order: best_bid, side: "LONG" as const,  orderId: fill.bidOrderID, margin: fill.fill_bid_margin },
+            { order: best_ask, side: "SHORT" as const, orderId: fill.askOrderID, margin: fill.fill_ask_margin },
+        ]
+
+        for (const { order, side, orderId, margin } of sides) {
+            
+            await redis.hset(` positions:${ market } `, orderId, JSON.stringify({
+                id:                orderId,
+                userId:            order.userId,
+                symbol:            market,
+                side:              side,
+                entry_price:       String(fill.fill_price),
+                quantity:          String(fill.fill_qty),
+                leverage:          String(order.leverage),
+                initial_margin:    String(margin),
+                liquidation_price: String(calculate_liquidation_price(fill.fill_price, order.leverage, side)),
+                status:            "OPEN"
+            }))         
+        }
     }
     return fills
 }

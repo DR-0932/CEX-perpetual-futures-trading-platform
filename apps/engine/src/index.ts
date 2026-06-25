@@ -1,9 +1,9 @@
 import { redis } from '@cex/redis'
 import { create_order, orderbooks ,Order} from './orderbook.js'
 import { match_orders } from './matching-engine.js'
+import { check_and_liqudate } from './liquidation.js'
 
-
-function parseOrder(orderData: Record<string,string>): Order{
+function parseOrder( orderData: Record<string,string> ): Order {
     return{
         id:         orderData.id,
         userId:     orderData.userId,
@@ -17,7 +17,7 @@ function parseOrder(orderData: Record<string,string>): Order{
     }
 }
 
-async function processMessage(messageId:string,rawFields:string[]){
+async function processOrder( messageId:string,rawFields:string[] ) {
     const orderData: Record<string,string> ={}    
 
     for( let i =0;i<rawFields.length; i +=2 ) {
@@ -26,7 +26,7 @@ async function processMessage(messageId:string,rawFields:string[]){
 
     const book = orderbooks.get(orderData.market)
     if(!book){
-        await redis.xack("orders","engine_group",messageId)
+        await redis.xack( "orders", "engine_group", messageId )
         return
     }  
 
@@ -34,25 +34,30 @@ async function processMessage(messageId:string,rawFields:string[]){
     create_order(book,order)
     await match_orders(orderData.market)
 
-    await redis.lpush(`replies:${orderData.id}`,JSON.stringify({
+    await redis.publish( "order:results", JSON.stringify ({
         orderId:   orderData.id,
-        status:    "filled",
-        market:    orderData.market
+        
+        market:    orderData.market,
+        
+        status:    "filled"
     }))
 
-    await redis.expire( `replis:${orderData.id}`,30 )
-    await redis.xack( "orders","engine_group",messageId )
+    await redis.expire( `replis:${ orderData.id }`, 30 )
+    await redis.xack( "orders", "engine_group", messageId )
 }
 
-async function matching_engine_to_liquidation_worker_stream() {
-    await redis.xgroup('CREATE','POSITIONS',)
+async function initRedis() {
+    try{
+        await redis.xgroup("CREATE", "markprice", "mark_price_group", "$","MKSTREAM")
+    }catch(e:any){
+        if(!e.message.includes("BUSYGROUP")) throw e
+    }
 }
 
 async function main() {
-    
     console.log("engine worker started monitoring orders..")
+    
     const pending = await redis.xreadgroup(
-        
         "GROUP",    "engine_group", "worker_1",
         
         "COUNT",    "100",
@@ -63,13 +68,12 @@ async function main() {
 
     if(pending){
         for(const[messageId,rawFields] of pending[0][1]){
-            await processMessage(messageId,rawFields)
+            await processOrder(messageId,rawFields)
         }
     }
 
     while(true) {
         const result =await redis.xreadgroup(
-           
             "GROUP",    "engine_group",   "worker_1",
            
             "COUNT",    "1",
@@ -83,7 +87,7 @@ async function main() {
         if(!result) continue;
         
         const [messageId,rawfields] = result[0][1][0]
-        await processMessage(messageId,rawfields)
+        await processOrder(messageId,rawfields)
     }
 
 
