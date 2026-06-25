@@ -1,14 +1,16 @@
-import express from "express"
+import express, { json } from "express"
 import { authRouter } from "./routes/auth-routes.js";
 import { exchangeRouter } from "./routes/exchange-routes.js";
-import { redis } from "@cex/redis";
+import { redis,redisSub } from "@cex/redis";
 
 const app = express();
 app.use(express.json());
 
 app.use("/auth",authRouter);
-app.use("/exchange",exchangeRouter)
+app.use("/exchange",exchangeRouter);
 
+
+export const pendingOrders = new Map<string,(data:any)=>void>()
 
 async function initRedis(){
     
@@ -23,6 +25,18 @@ async function initRedis(){
     }catch(e:any){
         if(!e.message.includes("BUSYGROUP")) throw e
     }
+
+    await redisSub.subscribe("order:results")
+    
+    redisSub.on("message",(channel,message)=>{
+        const data  =JSON.parse(message)
+        const resolve = pendingOrders.get(data.orderId)
+        if(resolve){
+            resolve(data)
+            pendingOrders.delete(data.orderId)
+        }
+    
+    })
 }
 
 async function main(){
