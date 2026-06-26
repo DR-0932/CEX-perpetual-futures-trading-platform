@@ -9,8 +9,5 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "module",
-  "dependencies": {
-    "@cex/types": "workspace:*"
-  }
+  "type": "module"
 }
