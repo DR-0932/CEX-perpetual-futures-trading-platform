@@ -4,7 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "tsc --watch & node --watch dist/index.js",
+    "build": "tsc",
+    "start": "node dist/index.js"
   },
   "keywords": [],
   "author": "",
@@ -12,7 +14,6 @@
   "type": "module",
   "dependencies": {
     "@cex/redis": "workspace:*",
-    "@cex/types": "workspace:*",
     "sorted-btree": "^2.1.0"
   }
 }

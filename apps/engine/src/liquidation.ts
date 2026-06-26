@@ -18,7 +18,7 @@ export async function check_and_liqudate( symbol:string, markPrice:bigint ):Prom
         }
         
         for(const [ id,data ] of Object.entries(positions) ){
-            const single_position = JSON.parse(data)
+            const single_position = JSON.parse(data as string)
             const liquidation_price = BigInt(single_position.liquidation_price)
             
             const should_liquidate = positions.side== "LONG"
