@@ -1,8 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
   provider = "prisma-client"
   output   = "../generated/prisma"
@@ -12,6 +7,84 @@ datasource db {
   provider = "postgresql"
 }
 
+model User {
+  id         String      @id @default(uuid())
+  name       String
+  username   String      @unique
+  password   String
+  email      String
+  collateral Collateral?
+  askFills   Fills[]     @relation("AskFills")
+  bidFills   Fills[]     @relation("BidFills")
+  orders     Orders[]
+  position   Positions[]
+}
+
+model Collateral {
+  id        String  @id @default(uuid())
+  total     BigInt
+  available BigInt
+  locked    BigInt?
+  userId    String  @unique
+  user      User    @relation(fields: [userId], references: [id])
+}
+
+model Orders {
+  id         String   @id @default(uuid())
+  symbol     String
+  market_id  String
+  margin     BigInt
+  leverage   BigInt
+  side       Side
+  type       Type
+  quantity   BigInt
+  user_id    String
+  created_at DateTime @default(now())
+  price      BigInt
+  filled_qty BigInt
+  status     Status
+  user       User     @relation(fields: [user_id], references: [id])
+}
+
+model Positions {
+  id                String   @id @default(uuid())
+  symbol            String
+  market_id         String
+  leverage          BigInt
+  side              Side
+  type              Type
+  quantity          BigInt
+  status            Status
+  PnL               BigInt
+  created_at        DateTime @default(now())
+  initial_margin    BigInt
+  liquidation_price BigInt
+  userId            String
+  entry_price       BigInt
+  user              User     @relation(fields: [userId], references: [id])
+}
+
+model Fills {
+  id              String   @id @default(uuid())
+  quantity        BigInt
+  askLeverage     BigInt
+  askMargin       BigInt
+  askOrderId      String
+  askRole         String
+  askUserId       String
+  bidLeverage     BigInt
+  bidMargin       BigInt
+  bidOrderId      String
+  bidRole         String
+  bidUserId       String
+  createdAt       DateTime @default(now())
+  market          String
+  price           BigInt
+  remainingAskQty BigInt
+  remainingBidQty BigInt
+  askUser         User     @relation("AskFills", fields: [askUserId], references: [id])
+  bidUser         User     @relation("BidFills", fields: [bidUserId], references: [id])
+}
 
 enum Side {
   LONG
@@ -22,124 +95,11 @@ enum Type {
   MARKET
   LIMIT
 }
+
 enum Status {
   OPEN
   CLOSED
   PARTIALLY_FILLED
   FAILED
   LIQUIDATED
-}
-
-
-model User{
-  id          String        @id @default(uuid())
-  name        String
-  username    String        @unique
-  password    String
-  email       String
- 
-
-  orders      Orders[]
-  bidFills    Fills[]      @relation("BidFills")
-  askFills    Fills[]      @relation("AskFills")
-  collateral  Collateral[]
-  position    Positions[]
-}
-
-model Collateral {
-  id            String        @id @default(uuid())
-  total         BigInt
-  available     BigInt
-  locked        BigInt?
-
-  userId      String          @unique
-  user        User    @relation(fields: [userId],references: [id])
-}
-
-model Orders{
-  id          String        @id @default(uuid())
-
-  price       BigInt
-  
-  symbol      String
-  market_id   String
-
-  margin      BigInt
-  leverage    BigInt
-  
-  side        Side     
-  type        Type
-  status      Status
-
-  quantity    BigInt
-  filled_qty  BigInt
-
-  user_id     String
-  user        User        @relation(fields: [user_id],references: [id])
-
-  created_at  DateTime    @default(now())
-}
-
-
-model Positions{
-  id                        String        @id @default(uuid())
-
-  entry_price               BigInt
-
-  symbol                    String
-  market_id                 String
-
-  initial_margin             BigInt
-  liquidation_price         BigInt
-  leverage                  BigInt
-  side                      Side     
-  type                      Type
-  quantity                  BigInt
-  status                    Status  
-  PnL                       BigInt
-
-  created_at                DateTime      @default(now())
-
-  userId    String
-  user      User          @relation(fields: [userId],references: [id])
-}
-
-
-model Fills {
-    id              String      @id @default(uuid())
-
-    // market info
-    market          String
-    price           BigInt
-    quantity        BigInt
-
-    // which orders were matched
-    bidOrderId      String
-    askOrderId      String
-
-    // who were the traders
-    bidUserId       String
-    askUserId       String
-
-    // margin used by each side
-    bidMargin       BigInt
-    askMargin       BigInt
-
-    // who was maker/taker
-    bidRole         String      // "MAKER" | "TAKER"
-    askRole         String      // "MAKER" | "TAKER"
-
-    // remaining qty after fill
-    remainingBidQty BigInt
-    remainingAskQty BigInt
-
-    // leverage used
-    bidLeverage     BigInt
-    askLeverage     BigInt
-
-    createdAt       DateTime    @default(now())
-
-    // relations
-    bidUser         User        @relation("BidFills", fields: [bidUserId], references: [id])
-    askUser         User        @relation("AskFills", fields: [askUserId], references: [id])
 }
