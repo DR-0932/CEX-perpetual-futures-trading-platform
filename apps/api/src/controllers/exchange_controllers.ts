@@ -1,7 +1,8 @@
 import type { Request,Response } from "express";
 import { prisma } from '@cex/db'
 import { redis } from '@cex/redis'
-
+import { pendingOrders } from "../index.js";
+import { v4 as uuid } from 'uuid'
 
 //types to be put in /packages/types and exported from there
 type onRamp = {
@@ -66,7 +67,7 @@ export async function create_orders(req:Request,res:Response):Promise<void>{
 
             /**----calculating margin---- */
         const required_margin = (price*quantity)/leverage
-        
+        const orderId = uuid();
         /**----updating amount to locked---- */
         await prisma.collateral.update({
             where:{id:userId},
@@ -79,29 +80,29 @@ export async function create_orders(req:Request,res:Response):Promise<void>{
         /**----db call creating order---- */
         await prisma.orders.create({
             data:{
-                user_id:userId,
-                price:BigInt(price),
-                market_id,
-                symbol,
-                margin:required_margin,
-                side,
-                type,
-                quantity:BigInt(quantity),
-                created_at:new Date(),
-                leverage,
-                status:"OPEN",
-                filled_qty:0n,
+                id:         orderId,
+                user_id:    userId,
+                price:      BigInt(price),
+                market_id:  market_id,
+                symbol:     symbol,
+                margin:     required_margin,
+                side:       side,
+                type:       type,
+                quantity:   BigInt(quantity),
+                created_at: new Date(),
+                leverage:   leverage,
+                status:     "OPEN",
+                filled_qty: 0n,
             }
         })
         
         /**----redis stream: adding limit order ---- */
         await redis.xadd(
             "orders",    "*",
-            "action",    "NEW_LIMIT_ORDER",   
-            
+            "id",        String(userId),            
             "userId",    String(userId),
+            "market",    symbol,
             "market_id", market_id,
-            
             "margin",    String(required_margin),
             "leverage",  String(leverage),
             "side",      String(side),
@@ -109,17 +110,15 @@ export async function create_orders(req:Request,res:Response):Promise<void>{
             "quantity",  String(quantity),
             "type",      type,
             "filled_qty", 0,
-            
-            "createdAt", String(data.createdAt.getTime()),
+            "createdAt", new Date().toISOString()
         )
 
-        const reply = await redis.blpop(`replies:${/**post order id */}`,10)
-        if(!reply){
-            res.status(408).json({error:"engine timeout"})
-            return
-        }
-        res.json(JSON.parse(reply[1]))
-
+        const result = await Promise.race([
+            new Promise((resolve)=>{pendingOrders.set(orderId,resolve)}),
+            new Promise((_,reject)=>setTimeout(()=>reject(new Error("timeout"))))
+        ])
+        res.json(result)
+    
     }catch(e){
         console.error("create orders error:",e);
         res.status(500).json({error:"internal server error"});
@@ -129,9 +128,10 @@ export async function create_orders(req:Request,res:Response):Promise<void>{
     //cancel order
 export async function cancel_order(req: Request,res:Response):Promise<void>{
     const userId = req.userId //will come from authmiddleware once i add it
-    const orderId = req.params;
+    const orderId = req.params.id as string;
+
     const order =await prisma.orders.findFirst({
-        where:{id:orderId},
+        where:{ id:orderId },
     })
     
     if (!order) {
@@ -144,39 +144,28 @@ export async function cancel_order(req: Request,res:Response):Promise<void>{
         return
     } 
 
-    /**db call to set order as closed */
-    if( order.filled_qty === 0n ){
-        try{
-            
-            await prisma.orders.update({
-                where: { id: orderId },
-                data: { status: "CLOSED" }
-            })
-            res.status(200).json({message:"order closed successfully"})
-        
-        }catch(e){
-            res.status(400).json({error:"order cancelled"})
-        }
-    }else{
-        /**db call is order is partially_filled */
-        const remaining_qty = order.quantity-order.filled_qty;
-        
-        const update_order = await prisma.orders.update({
-            where: { id: orderId},
-            data: {
-                status: "PARTIALLY_FILLED",
-                quantity: remaining_qty
+    try{
+        const remaining_qty = order.quantity - order.filled_qty
+        const unloack_margin = (remaining_qty*order.price)/order.leverage
+
+        await prisma.orders.update({
+            where:{ id: orderId },
+            data: { status: "CLOSED" }
+        })
+
+        await prisma.collateral.update({
+            where:{userId},
+            data:{
+                available:{increment: unloack_margin},
+                locked:   {decrement: unloack_margin}
             }
         })
-        
-        if(!update_order){
-            res.status(400).json({error:"could not cancel order try again"})
-        }
+        res.status(200).json({message:"order cancelled successfully"})
 
-        /**unlocking the locked margin according to qty yet to be filled */
-        const unlock_margin = (remaining_qty*order.price)/order.leverage 
+    }catch(e){
+        console.error("cancel_prder error",e)
+        res.status(500).json({error:"internal server error" })
     }
-
     //logic to unlock margins
 }   
 
