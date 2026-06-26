@@ -2,7 +2,7 @@ import WebSocket from "ws";
 import { redis } from "@cex/redis"
 
 function start_markprice_stream(symbol:string){
-    const socketUrl = `wss://fstream.binancefuture.com/ws/${symbol.toLowerCase}@markPrice`
+    const socketUrl = `wss://fstream.binance.com/ws/${symbol.toLowerCase()}@markPrice`
     const ws = new WebSocket(socketUrl)
 
     ws.on('open',()=>{
