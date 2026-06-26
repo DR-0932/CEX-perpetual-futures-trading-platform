@@ -222,18 +222,21 @@ importers:
       '@cex/redis':
         specifier: workspace:*
         version: link:../../packages/redis
-      '@cex/types':
-        specifier: workspace:*
-        version: link:../../packages/types
       bcrypt:
         specifier: ^6.0.0
         version: 6.0.0
+      dotenv:
+        specifier: ^17.4.2
+        version: 17.4.2
       express:
         specifier: ^5.2.1
         version: 5.2.1
       jsonwebtoken:
         specifier: ^9.0.3
         version: 9.0.3
+      uuid:
+        specifier: ^14.0.1
+        version: 14.0.1
     devDependencies:
       '@types/bcrypt':
         specifier: ^6.0.0
@@ -244,6 +247,9 @@ importers:
       '@types/jsonwebtoken':
         specifier: ^9.0.10
         version: 9.0.10
+      '@types/uuid':
+        specifier: ^11.0.0
+        version: 11.0.0
 
   apps/dbPoller:
     dependencies:
@@ -266,9 +272,6 @@ importers:
       '@cex/redis':
         specifier: workspace:*
         version: link:../../packages/redis
-      '@cex/types':
-        specifier: workspace:*
-        version: link:../../packages/types
       sorted-btree:
         specifier: ^2.1.0
         version: 2.1.0
@@ -281,9 +284,6 @@ importers:
       '@cex/redis':
         specifier: workspace:*
         version: link:../../packages/redis
-      '@cex/types':
-        specifier: workspace:*
-        version: link:../../packages/types
       ws:
         specifier: ^8.21.0
         version: 8.21.0
@@ -292,11 +292,7 @@ importers:
         specifier: ^8.18.1
         version: 8.18.1
 
-  apps/web:
-    dependencies:
-      '@cex/types':
-        specifier: workspace:*
-        version: link:../../packages/types
+  apps/web: {}
 
   packages/db:
     dependencies:
@@ -306,6 +302,9 @@ importers:
       '@prisma/client':
         specifier: ^7.8.0
         version: 7.8.0(prisma@7.8.0(@types/react@19.2.15)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(typescript@6.0.3))(typescript@6.0.3)
+      dotenv:
+        specifier: ^17.4.2
+        version: 17.4.2
       pg:
         specifier: ^8.21.0
         version: 8.21.0
@@ -329,8 +328,6 @@ importers:
       '@types/node':
         specifier: ^25.9.1
         version: 25.9.1
-
-  packages/types: {}
 
 packages:
 
@@ -613,6 +610,10 @@ packages:
 
   '@types/serve-static@2.2.0':
     resolution: {integrity: sha512-8mam4H1NHLtu7nmtalF7eyBH14QyOASmcxHhSfEoRyr0nP/YdoesEtU+uSRvMe96TW/HPTtkoKqQLl53N7UXMQ==}
+
+  '@types/uuid@11.0.0':
+    resolution: {integrity: sha512-HVyk8nj2m+jcFRNazzqyVKiZezyhDKrGUA3jlEcg/nZ6Ms+qHwocba1Y/AaVaznJTAM9xpdFSh+ptbNrhOGvZA==}
+    deprecated: This is a stub types definition. uuid provides its own type definitions, so you do not need this installed.
 
   '@types/ws@8.18.1':
     resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
@@ -1263,6 +1264,10 @@ packages:
     resolution: {integrity: sha512-pjy2bYhSsufwWlKwPc+l3cN7+wuJlK6uz0YdJEOlQDbl6jo/YlPi4mb8agUkVC8BF7V8NuzeyPNqRksA3hztKQ==}
     engines: {node: '>= 0.8'}
 
+  uuid@14.0.1:
+    resolution: {integrity: sha512-6ZxzVpzDXDa3bJWaHilVayA+BH/1zmxCJoVgvmqJnid/gPoKHxUrS/aC/T6LGQtNHT+XHG9fXPJB4d+IrU30Ew==}
+    hasBin: true
+
   valibot@1.2.0:
     resolution: {integrity: sha512-mm1rxUsmOxzrwnX5arGS+U4T25RdvpPjPN4yR0u9pUBov9+zGVtO84tif1eY4r6zWxVxu3KzIyknJy3rxfRZZg==}
     peerDependencies:
@@ -1580,6 +1585,10 @@ snapshots:
     dependencies:
       '@types/http-errors': 2.0.5
       '@types/node': 25.9.1
+
+  '@types/uuid@11.0.0':
+    dependencies:
+      uuid: 14.0.1
 
   '@types/ws@8.18.1':
     dependencies:
@@ -2237,6 +2246,8 @@ snapshots:
   undici-types@7.24.6: {}
 
   unpipe@1.0.0: {}
+
+  uuid@14.0.1: {}
 
   valibot@1.2.0(typescript@6.0.3):
     optionalDependencies:
