@@ -259,6 +259,9 @@ importers:
       '@cex/redis':
         specifier: workspace:*
         version: link:../../packages/redis
+      dotenv:
+        specifier: ^17.4.2
+        version: 17.4.2
     devDependencies:
       '@types/node':
         specifier: ^20.0.0
