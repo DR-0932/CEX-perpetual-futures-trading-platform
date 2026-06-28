@@ -2,7 +2,7 @@ import express, { json } from "express"
 import { authRouter } from "./routes/auth-routes.js";
 import { exchangeRouter } from "./routes/exchange-routes.js";
 import { redis,redisSub } from "@cex/redis";
-
+import "dotenv/config"
 const app = express();
 app.use(express.json());
 
@@ -30,6 +30,8 @@ async function initRedis(){
     
     redisSub.on("message",(channel,message)=>{
         const data  =JSON.parse(message)
+        console.log("pubsub received:", data)
+        console.log("pending orders:", [...pendingOrders.keys()])
         const resolve = pendingOrders.get(data.orderId)
         if(resolve){
             resolve(data)
