@@ -62,15 +62,17 @@ export async function create_orders(req:Request,res:Response):Promise<void>{
     if(!data){
         res.status(404).json({error:"no data recieved"})
     }
+    
     try{
         const {userId,symbol,market_id,price,leverage,side,type,quantity} =data
-
+        console.log("userId:", userId);
+        console.log("request body:", req.body)
             /**----calculating margin---- */
         const required_margin = (price*quantity)/leverage
         const orderId = uuid();
         /**----updating amount to locked---- */
         await prisma.collateral.update({
-            where:{id:userId},
+            where:{userId},
             data:{
                 available: { decrement: BigInt(required_margin)},
                 locked:    { increment: BigInt(required_margin)}
@@ -99,7 +101,7 @@ export async function create_orders(req:Request,res:Response):Promise<void>{
         /**----redis stream: adding limit order ---- */
         await redis.xadd(
             "orders",    "*",
-            "id",        String(userId),            
+            "id",        String(orderId),            
             "userId",    String(userId),
             "market",    symbol,
             "market_id", market_id,
@@ -115,7 +117,7 @@ export async function create_orders(req:Request,res:Response):Promise<void>{
 
         const result = await Promise.race([
             new Promise((resolve)=>{pendingOrders.set(orderId,resolve)}),
-            new Promise((_,reject)=>setTimeout(()=>reject(new Error("timeout"))))
+            new Promise((_,reject)=>setTimeout(()=>reject(new Error("timeout")),30000))
         ])
         res.json(result)
     
