@@ -37,7 +37,8 @@ export function create_order(book:Orderbook,order:Order){
     const map =  order.side === "LONG" 
     ? book.bids 
     : book.asks
-    
+             console.log("create_order side:", order.side, "price:", order.price)
+
     const level = map.get(order.price) ?? new Map<string,Order>()
     
     level.set(order.id,order)
@@ -91,6 +92,6 @@ export function updateOrderQty(book: Orderbook, orderId: string, newQty: bigint)
 }
 
 export const orderbooks = new Map<string, Orderbook>()
-orderbooks.set("BTC-USDT", createOrderbook())
-orderbooks.set("ETH-USDT", createOrderbook())
-orderbooks.set("SOL-USDT", createOrderbook())
+orderbooks.set("BTCUSDT", createOrderbook())
+orderbooks.set("ETHUSDT", createOrderbook())
+orderbooks.set("SOLUSDT", createOrderbook())
