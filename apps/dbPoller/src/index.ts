@@ -1,5 +1,6 @@
 import {redis} from "@cex/redis"
 import { prisma } from "@cex/db"
+import "dotenv/config"
 
 async function initRedis() {
     try{
@@ -7,8 +8,6 @@ async function initRedis() {
     }catch(e:any){
         if(!e.message.includes("BUSYGROUP")) throw e
     }
-
-
 }
 
 async function process_fills() {
@@ -39,8 +38,8 @@ async function process_fills() {
                 quantity:        BigInt(data.fill_qty),
                 bidOrderId:      data.bid_orderId,
                 askOrderId:      data.ask_orderId,
-                bidUserId:       data.bid_userId,
-                askUserId:       data.ask_userId,
+                bidUser:         { connect: { id: data.bid_userId } },
+                askUser:         { connect: { id: data.ask_userId } },
                 bidMargin:       BigInt(data.filled_bid_margin),
                 askMargin:       BigInt(data.filled_ask_margin),
                 bidRole:         "TAKER",
@@ -49,8 +48,42 @@ async function process_fills() {
                 remainingAskQty: BigInt(data.remaining_ask_qty),
                 bidLeverage:     BigInt(data.bid_leverage),
                 askLeverage:     BigInt(data.ask_leverage),
-            }
+            } as any
         });
+
+        await prisma.positions.create({
+            data: {
+                userId:            data.bid_userId,
+                symbol:            data.market,
+                market_id:         data.market,
+                side:              "LONG",
+                entry_price:       BigInt(data.fill_price),
+                quantity:          BigInt(data.fill_qty),
+                leverage:          BigInt(data.bid_leverage),
+                initial_margin:    BigInt(data.filled_bid_margin),
+                liquidation_price: BigInt(data.bid_liquidation_price),
+                status:            "OPEN",
+                type:              "LIMIT",
+                PnL:               0n
+            }
+        })
+
+        await prisma.positions.create({
+            data: {
+                userId:            data.ask_userId,
+                symbol:            data.market,
+                market_id:         data.market,
+                side:              "SHORT",
+                entry_price:       BigInt(data.fill_price),
+                quantity:          BigInt(data.fill_qty),
+                leverage:          BigInt(data.ask_leverage),
+                initial_margin:    BigInt(data.filled_ask_margin),
+                liquidation_price: BigInt(data.ask_liquidation_price),
+                status:            "OPEN",
+                type:              "LIMIT",
+                PnL:               0n
+            }
+        })
         await redis.xack("fills","poller_group",messageId)
     }
 }
