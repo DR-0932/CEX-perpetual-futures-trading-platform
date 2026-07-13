@@ -3,8 +3,16 @@ import { authRouter } from "./routes/auth-routes.js";
 import { exchangeRouter } from "./routes/exchange-routes.js";
 import { redis,redisSub } from "@cex/redis";
 import "dotenv/config"
+import cors from "cors"
+
+
 const app = express();
 app.use(express.json());
+
+app.use(cors({
+    origin: "http://localhost:3001",
+    credentials: true
+}))
 
 app.use("/auth",authRouter);
 app.use("/exchange",exchangeRouter);
@@ -21,11 +29,10 @@ async function initRedis(){
     }
 
     try{
-        await redis.xgroup("CREATE","FILLS","api_group","$","MKSTREAM")
+        await redis.xgroup("CREATE","fills","api_group","$","MKSTREAM")
     }catch(e:any){
         if(!e.message.includes("BUSYGROUP")) throw e
     }
-
     await redisSub.subscribe("order:results")
     
     redisSub.on("message",(channel,message)=>{
@@ -37,7 +44,6 @@ async function initRedis(){
             resolve(data)
             pendingOrders.delete(data.orderId)
         }
-    
     })
 }
 
@@ -48,4 +54,7 @@ async function main(){
     })
 }
 
-main().catch(console.error)
+main().catch((err) => {
+    console.error("Fatal error during startup:", err);
+    process.exit(1);
+});
