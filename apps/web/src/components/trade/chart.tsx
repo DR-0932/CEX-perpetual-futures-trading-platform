@@ -13,7 +13,6 @@ export default function Chart() {
 
         let isDestroyed = false
 
-        // 1. Initialize Chart
         const chart = createChart(chartContainerRef.current, {
             width: chartContainerRef.current.clientWidth,
             height: chartContainerRef.current.clientHeight || 400,
@@ -38,7 +37,6 @@ export default function Chart() {
         chartRef.current = chart
         seriesRef.current = series
 
-        // 2. Fetch Historical 1-Minute Candles
         fetch("https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=1m&limit=100")
         .then(res => res.json())
         .then(data => {
@@ -53,7 +51,6 @@ export default function Chart() {
             series.setData(candles)
         })
 
-        // 3. Connect to 1-Minute WebSocket Stream (Updates live every second)
         const ws = new WebSocket("wss://fstream.binance.com/ws/btcusdt@kline_1m")
 
         ws.onmessage = (event) => {
@@ -62,7 +59,6 @@ export default function Chart() {
             if (!msg.k) return 
             
             const k = msg.k
-            // Updates or appends the 1-minute candle seamlessly
             series.update({
                 time: (k.t / 1000) as UTCTimestamp,
                 open: parseFloat(k.o),
@@ -73,7 +69,6 @@ export default function Chart() {
             console.log("kline update:", msg.k.t, msg.k.c)
         }
 
-        // 4. Responsive Resize Handling
         const resizeObserver = new ResizeObserver(() => {
             if (chartContainerRef.current && !isDestroyed) {
                 chart.resize(
