@@ -3,7 +3,7 @@ import { prisma } from '@cex/db'
 import { redis } from '@cex/redis'
 import { pendingOrders } from "../index.js";
 import { v4 as uuid } from 'uuid'
-
+import { Status } from '@cex/db'    
 //types to be put in /packages/types and exported from there
 type onRamp = {
     userId:string,
@@ -31,9 +31,30 @@ type OrderStatus = {
 } 
 
 
-/**----adding money to account wallet---- */
+export async function get_positions(req: Request, res: Response): Promise<void> {
+    const { userId } = req.query
+    
+    try {
+        const positions = await prisma.positions.findMany({
+            where: { userId: userId as string, status: "OPEN" }
+        })
+            res.json(positions.map(p => ({
+                ...p,
+                entry_price: p.entry_price.toString(),
+                quantity: p.quantity.toString(),
+                leverage: p.leverage.toString(),
+                liquidation_price: p.liquidation_price.toString(),
+                initial_margin: p.initial_margin.toString(),
+                PnL: p.PnL.toString(),
+            })))
+        
+        } catch (e) {
+         console.error("get_positions error:", e)
+        res.status(500).json({ error: "internal server error" })
+    }
+}
+
 export async function on_ramp(req:Request,res:Response):Promise<void>{
-   
     const {userId,amount} = req.body as onRamp
     try{
         await prisma.collateral.upsert({
@@ -50,27 +71,52 @@ export async function on_ramp(req:Request,res:Response):Promise<void>{
             }
         })
         res.status(200).json({message:"balance added"})
+    
     }catch(e){
         res.status(400).json({error:"Unable to update collateral",e})
     }
 
 }
 
-/**----creating a new order---- */
+export async function get_orders(req: Request, res: Response): Promise<void> {
+    const { userId, status } = req.query
+    try {
+        const orders = await prisma.orders.findMany({
+            where: {
+                user_id: userId as string,
+                ...(status ? { status: status as Status } : {})
+            },
+            orderBy: { created_at: "desc" }
+        })
+        res.json(orders.map(o => ({
+            ...o,
+            price:      o.price.toString(),
+            quantity:   o.quantity.toString(),
+            filled_qty: o.filled_qty.toString(),
+            leverage:   o.leverage.toString(),
+            margin:     o.margin.toString(),
+        })))
+    
+    } catch (e) {
+        console.error("get_orders error:", e)
+        res.status(500).json({ error: "internal server error" })
+    }
+}        
+
 export async function create_orders(req:Request,res:Response):Promise<void>{
     const data = req.body as orderType
     if(!data){
         res.status(404).json({error:"no data recieved"})
+        return
     }
     
     try{
         const {userId,symbol,market_id,price,leverage,side,type,quantity} =data
-        console.log("userId:", userId);
         console.log("request body:", req.body)
-            /**----calculating margin---- */
+
         const required_margin = (price*quantity)/leverage
         const orderId = uuid();
-        /**----updating amount to locked---- */
+
         await prisma.collateral.update({
             where:{userId},
             data:{
@@ -79,26 +125,6 @@ export async function create_orders(req:Request,res:Response):Promise<void>{
             }
         })
         
-        /**----db call creating order---- */
-        await prisma.orders.create({
-            data:{
-                id:         orderId,
-                user_id:    userId,
-                price:      BigInt(price),
-                market_id:  market_id,
-                symbol:     symbol,
-                margin:     required_margin,
-                side:       side,
-                type:       type,
-                quantity:   BigInt(quantity),
-                created_at: new Date(),
-                leverage:   leverage,
-                status:     "OPEN",
-                filled_qty: 0n,
-            }
-        })
-        
-        /**----redis stream: adding limit order ---- */
         await redis.xadd(
             "orders",    "*",
             "id",        String(orderId),            
@@ -117,7 +143,7 @@ export async function create_orders(req:Request,res:Response):Promise<void>{
 
         const result = await Promise.race([
             new Promise((resolve)=>{pendingOrders.set(orderId,resolve)}),
-            new Promise((_,reject)=>setTimeout(()=>reject(new Error("timeout")),30000))
+            new Promise((_,reject)=>setTimeout(()=>reject(new Error("timeout")),5000))
         ])
         res.json(result)
     
@@ -148,7 +174,7 @@ export async function cancel_order(req: Request,res:Response):Promise<void>{
 
     try{
         const remaining_qty = order.quantity - order.filled_qty
-        const unloack_margin = (remaining_qty*order.price)/order.leverage
+        const unlock_margin = (remaining_qty*order.price)/order.leverage
 
         await prisma.orders.update({
             where:{ id: orderId },
@@ -158,8 +184,8 @@ export async function cancel_order(req: Request,res:Response):Promise<void>{
         await prisma.collateral.update({
             where:{userId},
             data:{
-                available:{increment: unloack_margin},
-                locked:   {decrement: unloack_margin}
+                available:{increment: unlock_margin},
+                locked:   {decrement: unlock_margin}
             }
         })
         res.status(200).json({message:"order cancelled successfully"})
@@ -171,6 +197,25 @@ export async function cancel_order(req: Request,res:Response):Promise<void>{
     //logic to unlock margins
 }   
 
+export async function get_collateral(req: Request, res: Response): Promise<void> {
+    const { userId } = req.query
+    try {
+        const collateral = await prisma.collateral.findUnique({
+            where: { userId: userId as string }
+        })
+        if (!collateral) {
+            res.json({ total: "0", available: "0", locked: "0" })
+            return
+        }
+        res.json({
+            total: collateral.total.toString(),
+            available: collateral.available.toString(),
+            locked: collateral.locked?.toString() || "0"
+        })
+    } catch (e) {
+        res.status(500).json({ error: "internal server error" })
+    }
+}
 //remove/exit position
 
 //check balance/get collateral: available && locked
