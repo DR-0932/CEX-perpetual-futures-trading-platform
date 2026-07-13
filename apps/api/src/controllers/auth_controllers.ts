@@ -48,7 +48,7 @@ export async function signin(req:Request,res:Response):Promise<void>{
             return
         }
         
-        const password_match   =  bcrypt.compare(password,user?.password)
+        const password_match = bcrypt.compare(password,user?.password)
         if(!password_match){
             res.status(401).json({error:"invalid password or username"})
         }
@@ -58,5 +58,17 @@ export async function signin(req:Request,res:Response):Promise<void>{
     }catch(e){
         console.error(e)
         res.status(500).json({error:"interval server error"})
+    }
+}
+
+export async function me(req: Request, res: Response): Promise<void> {
+    try {
+        const user = await prisma.user.findUnique({
+            where: { id: req.userId },
+            select: { id: true, username: true, email: true, name: true }
+        })
+        res.json(user)
+    } catch (e) {
+        res.status(500).json({ error: "internal server error" })
     }
 }
