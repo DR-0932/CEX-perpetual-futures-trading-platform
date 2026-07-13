@@ -13,11 +13,23 @@ type Position = {
     status: string
 }
 
+type Order = {
+    id: string
+    symbol: string
+    side: string
+    type: string
+    price: string
+    quantity: string
+    filled_quantity: string
+    status: string
+    created_at: string
+}
+
 export default function PositionsTable() {
     const [positions, setPositions] = useState<Position[]>([])
-    // 1. This state is already correctly placed here:
+    const [orders, setOrders] = useState<Order[]>([])
     const [activeTab, setActiveTab] = useState<"positions" | "orders" | "fills">("positions")
-    
+
     useEffect(() => {
         async function fetchPositions() {
             const token = localStorage.getItem("token")
@@ -29,14 +41,38 @@ export default function PositionsTable() {
             })
             const data = await res.json()
             setPositions(Array.isArray(data) ? data : data.positions || [])
-            console.log("positions response:", data)    
         }
         fetchPositions()
     }, [])
 
+    useEffect(() => {
+        if (activeTab !== "orders") return
+
+        async function fetchOrders() {
+            const token = localStorage.getItem("token")
+            const userId = localStorage.getItem("userId")
+            if (!token || !userId) return
+
+            const res = await fetch(`http://localhost:3000/exchange/orders?userId=${userId}&status=OPEN`, {
+                headers: { Authorization: `Bearer ${token}` }
+            })
+            const data = await res.json()
+            setOrders(Array.isArray(data) ? data : data.orders || [])
+        }
+        fetchOrders()
+    }, [activeTab])
+
+    async function cancelOrder(orderId: string) {
+        const token = localStorage.getItem("token")
+        await fetch(`http://localhost:3000/exchange/orders/${orderId}`, {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${token}` }
+        })
+        setOrders(prev => prev.filter(o => o.id !== orderId))
+    }
+
     return (
         <div className="h-full overflow-auto">
-            {/* 2. Your new dynamic tabs replace the old static buttons here: */}
             <div className="flex gap-4 px-4 py-2 border-b text-sm">
                 <button 
                     onClick={() => setActiveTab("positions")}
@@ -58,7 +94,6 @@ export default function PositionsTable() {
                 </button>
             </div>
 
-            {/* 3. Conditional Rendering based on activeTab */}
             {activeTab === "positions" && (
                 <table className="w-full text-xs font-mono">
                     <thead>
@@ -97,7 +132,49 @@ export default function PositionsTable() {
             )}
 
             {activeTab === "orders" && (
-                <div className="p-4 text-xs text-muted-foreground">Open Orders content goes here...</div>
+                <table className="w-full text-xs font-mono">
+                    <thead>
+                        <tr className="text-muted-foreground border-b">
+                            <th className="text-left px-4 py-2">Symbol</th>
+                            <th className="text-left px-4 py-2">Side</th>
+                            <th className="text-left px-4 py-2">Type</th>
+                            <th className="text-left px-4 py-2">Price</th>
+                            <th className="text-left px-4 py-2">Size</th>
+                            <th className="text-left px-4 py-2">Filled</th>
+                            <th className="text-left px-4 py-2">Status</th>
+                            <th className="text-left px-4 py-2"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {orders.length === 0 ? (
+                            <tr>
+                                <td colSpan={8} className="text-center text-muted-foreground py-8">
+                                    No open orders
+                                </td>
+                            </tr>
+                        ) : (
+                            orders.map(o => (
+                                <tr key={o.id} className="border-b hover:bg-muted/20">
+                                    <td className="px-4 py-2">{o.symbol}</td>
+                                    <td className={`px-4 py-2 ${o.side === "LONG" ? "text-green-400" : "text-red-400"}`}>{o.side}</td>
+                                    <td className="px-4 py-2">{o.type}</td>
+                                    <td className="px-4 py-2">{o.price}</td>
+                                    <td className="px-4 py-2">{o.quantity}</td>
+                                    <td className="px-4 py-2">{o.filled_quantity}</td>
+                                    <td className="px-4 py-2">{o.status}</td>
+                                    <td className="px-4 py-2">
+                                        <button
+                                            onClick={() => cancelOrder(o.id)}
+                                            className="text-red-400 hover:underline"
+                                        >
+                                            Cancel
+                                        </button>
+                                    </td>
+                                </tr>
+                            ))
+                        )}
+                    </tbody>
+                </table>
             )}
 
             {activeTab === "fills" && (
