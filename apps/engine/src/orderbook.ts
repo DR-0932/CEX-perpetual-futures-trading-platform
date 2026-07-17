@@ -17,7 +17,7 @@ export type Order = {
 type price_level = Map<string,Order>
 
 export type Orderbook = {
-    //need to BTree but throwing error for somereason
+    //need to use BTree but throwing error for somereason
     bids: Map<bigint,price_level>
     asks: Map<bigint,price_level>
     seq: number
@@ -35,9 +35,9 @@ export function createOrderbook(): Orderbook{
 
 export function create_order(book:Orderbook,order:Order){
     const map =  order.side === "LONG" 
-    ? book.bids 
+    ? book.bids     
     : book.asks
-             console.log("create_order side:", order.side, "price:", order.price)
+        console.log("create_order side:", order.side, "price:", order.price)
 
     const level = map.get(order.price) ?? new Map<string,Order>()
     
@@ -46,7 +46,7 @@ export function create_order(book:Orderbook,order:Order){
     book.orderIndex.set(order.id,{side:order.side,price:order.price})
     book.seq++
 }
-
+    
 export function removeOrder(book:Orderbook,orderId:string){
     const entry =book.orderIndex.get(orderId)
     if(!entry) return

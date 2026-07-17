@@ -71,13 +71,15 @@ async function process_prices() {
     
     ) as [string, [string, string[]][]][]
 
+
     if (pending?.[0]?.[1]?.length) {
         for (const [messageId, rawFields] of pending[0][1]) {
             await processMarkPrice(messageId, rawFields)
         }
     }
-
     console.log("pending messages processed, starting live loop")
+
+
     while(true){
         console.log("waiting for markprice message...")
        
@@ -91,22 +93,24 @@ async function process_prices() {
             "STREAMS",      "markprice",        ">",
         )as [string,[string,string[]][]][]
         
+
         if(!result) continue;
         const [messageId,rawFields] = result[0][1][0];
         const data: Record<string,string> = {};
+
 
         for(let i = 0; i<rawFields.length;i+=2){
             data[rawFields[i]] = rawFields[i+1];
         }
         
         await check_and_liqudate(data.symbol, BigInt(data.price))
-        
         await redisMarkPrice.xack("markprice","mark_price_group",messageId)
-        
+
         console.log("xack done")
     }
 }
 
+//creating markprice consumer group
 async function initRedis() {
     try{
         await redis.xgroup("CREATE", "markprice", "mark_price_group", "$","MKSTREAM")
@@ -119,9 +123,9 @@ async function main() {
     console.log("engine worker started monitoring orders..")
     
     await initRedis();
-
     process_prices();
-
+    
+    //reads from engine group, order stream coming from api/index.ts
     const pending = await redis.xreadgroup(
         "GROUP",    "engine_group", "worker_1",
         
@@ -138,6 +142,8 @@ async function main() {
     }
 
     while(true) {
+            
+        //reads from engine group, order stream coming from api/index.ts
         const result =await redis.xreadgroup(
             "GROUP",    "engine_group",   "worker_1",
            

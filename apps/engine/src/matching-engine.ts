@@ -21,8 +21,8 @@ interface fillResultWithOrders extends fillResult {
 }
 
 export  function calculateFill(bestBid:Order,bestAsk:Order) {
-    //fill price will be calculated based on maker,(the one who)
-    // was in the orderbook first, we need timecomparision to decis
+    //fill price will be calculated based on maker,the one who
+    // was in the orderbook first, we need time comparision to decide
     // who's price we are going to follow*/
     const fill_price = bestBid.createdAt < bestAsk.createdAt
     ? bestBid.price
@@ -32,14 +32,14 @@ export  function calculateFill(bestBid:Order,bestAsk:Order) {
     ? bestBid.quantity
     : bestAsk.quantity
 
-    const bid_fully_filled = bestBid.quantity<=bestAsk.quantity
-    const ask_fully_filled = bestAsk.quantity<=bestBid.quantity
+    const bid_fully_filled = bestBid.quantity <= bestAsk.quantity
+    const ask_fully_filled = bestAsk.quantity <= bestBid.quantity
 
-    const remaining_bid_qty = bestBid.quantity-fill_qty
-    const remaining_ask_qty = bestAsk.quantity-fill_qty
+    const remaining_bid_qty = bestBid.quantity - fill_qty
+    const remaining_ask_qty = bestAsk.quantity - fill_qty
 
-    const fill_bid_margin = (fill_qty*fill_price)/bestBid.leverage
-    const fill_ask_margin = (fill_qty*fill_price)/bestAsk.leverage
+    const fill_bid_margin = (fill_qty*fill_price) / bestBid.leverage
+    const fill_ask_margin = (fill_qty*fill_price) / bestAsk.leverage
 
     return{
         fill_price,
@@ -50,7 +50,7 @@ export  function calculateFill(bestBid:Order,bestAsk:Order) {
         fill_bid_margin,
         bid_fully_filled,
         ask_fully_filled,
-        askOrderID:bestAsk.id,//need to fix this.
+        askOrderID:bestAsk.id,
         bidOrderID:bestBid.id
 
     }
@@ -96,7 +96,7 @@ export async function match_orders(market:string):Promise<fillResult[]> {
         const ask_liquidation_price = calculate_liquidation_price(fill.fill_price,best_ask.leverage,"SHORT")
 
         await (redis as any).xadd(
-            "fills", "*",
+            "fills",                    "*",
             "fill_price",               String(fill.fill_price),
             "fill_qty",                 String(fill.fill_qty),
 
