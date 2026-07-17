@@ -1,65 +1,129 @@
-import Image from "next/image";
+"use client"
 
-export default function Home() {
-  return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+import { useState } from "react"
+import { useRouter } from "next/navigation"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { signup_schema, login_schema } from "@cex/validation"
+
+export default function LoginPage() {
+    const router = useRouter()
+    const [isSignup, setIsSignup] = useState(false)
+    const [username, setUsername] = useState("")
+    const [password, setPassword] = useState("")
+    const [name, setName] = useState("")
+    const [email, setEmail] = useState("")
+    const [error, setError] = useState("")
+
+    async function handleSubmit() {
+        setError("")
+
+        // validate with the shared zod schema before hitting the API
+        const result = isSignup
+            ? signup_schema.safeParse({ name, email, username, password })
+            : login_schema.safeParse({ identifier: username, password })
+
+        if (!result.success) {
+            setError(result.error.issues[0].message)
+            return
+        }
+
+        const url = isSignup
+            ? "http://localhost:3000/auth/signup"
+            : "http://localhost:3000/auth/signin"
+
+        const res = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(result.data)
+        })
+
+        const data = await res.json()
+
+        if (!res.ok) {
+            setError(data.error || "Something went wrong")
+            return
+        }
+
+        if (isSignup) {
+            localStorage.setItem("userId", data.userId)
+            setIsSignup(false)
+        } else {
+            localStorage.setItem("token", data.token)
+            router.push("/trade")
+        }
+    }
+
+    return (
+        <div className="min-h-screen flex items-center justify-center bg-background">
+            <div className="w-96 p-8 border border-border rounded-lg bg-card">
+                <h1 className="text-2xl font-bold mb-6">
+                    {isSignup ? "Create Account" : "Sign In"}
+                </h1>
+
+                {isSignup && (
+                    <>
+                        <div className="mb-3">
+                            <Label htmlFor="name">Name</Label>
+                            <Input
+                                id="name"
+                                placeholder="Name"
+                                value={name}
+                                onChange={e => setName(e.target.value)}
+                            />
+                        </div>
+
+                        <div className="mb-3">
+                            <Label htmlFor="email">Email</Label>
+                            <Input
+                                id="email"
+                                type="email"
+                                placeholder="Email"
+                                value={email}
+                                onChange={e => setEmail(e.target.value)}
+                            />
+                        </div>
+                    </>
+                )}
+
+                <div className="mb-3">
+                    <Label htmlFor="username">Username</Label>
+                    <Input
+                        id="username"
+                        placeholder="Username"
+                        value={username}
+                        onChange={e => setUsername(e.target.value)}
+                    />
+                </div>
+
+                <div className="mb-4">
+                    <Label htmlFor="password">Password</Label>
+                    <Input
+                        id="password"
+                        type="password"
+                        placeholder="Password"
+                        value={password}
+                        onChange={e => setPassword(e.target.value)}
+                    />
+                </div>
+
+                {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
+
+                <Button onClick={handleSubmit} className="w-full mb-3">
+                    {isSignup ? "Sign Up" : "Sign In"}
+                </Button>
+
+                <p className="text-center text-sm text-muted-foreground">
+                    {isSignup ? "Already have an account?" : "Don't have an account?"}
+                    <button
+                        onClick={() => setIsSignup(!isSignup)}
+                        className="text-primary ml-1 hover:underline"
+                    >
+                        {isSignup ? "Sign In" : "Sign Up"}
+                    </button>
+                </p>
+            </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
-  );
+    )
 }
