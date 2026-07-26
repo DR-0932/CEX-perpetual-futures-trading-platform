@@ -1,4 +1,4 @@
-import { redis,redisMarkPrice } from '@cex/redis'
+import { redis } from '@cex/redis'
 import { create_order, orderbooks ,Order} from './orderbook.js'
 import { match_orders } from './matching-engine.js'
 import { check_and_liqudate } from './liquidation.js'
@@ -61,7 +61,7 @@ async function processMarkPrice(messageId: string, rawFields: string[]) {
 async function process_prices() {
     console.log("process_prices started")
     
-    const pending = await redisMarkPrice.xreadgroup(
+    const pending = await redis.xreadgroup(
     
         "GROUP",   "mark_price_group", "engine_worker",
         
@@ -83,7 +83,7 @@ async function process_prices() {
     while(true){
         console.log("waiting for markprice message...")
        
-        const result = await redisMarkPrice.xreadgroup(
+        const result = await redis.xreadgroup(
             "GROUP",        "mark_price_group",     "engine_worker",
             
             "COUNT",        "1",
@@ -104,7 +104,7 @@ async function process_prices() {
         }
         
         await check_and_liqudate(data.symbol, BigInt(data.price))
-        await redisMarkPrice.xack("markprice","mark_price_group",messageId)
+        await redis.xack("markprice","mark_price_group",messageId)
 
         console.log("xack done")
     }

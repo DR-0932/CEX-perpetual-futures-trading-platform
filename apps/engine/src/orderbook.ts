@@ -24,6 +24,22 @@ export type Orderbook = {
     orderIndex: Map<string, {side: "LONG" | "SHORT", price:bigint}>
 }
 
+export type DepthLevel={
+    price:string,
+    size:string,
+    total:string
+}
+
+export type BookSnapShot={
+    bids:DepthLevel[]
+    asks:DepthLevel[]
+    seq:number
+}
+
+function remaining_qty(order:Order):bigint{
+    return order.quantity-order.filled_qty
+}
+
 export function createOrderbook(): Orderbook{
     return {
         bids: new Map(),
@@ -32,6 +48,36 @@ export function createOrderbook(): Orderbook{
         orderIndex: new Map()
     }
 }
+
+export function get_snapshot(book:Orderbook,depth=20):BookSnapShot{
+    const bid_prices = [...book.bids.keys()].sort((a,b)=>( a > b? - 1:1 )).slice(0,depth)
+    const ask_prices = [...book.bids.keys()].sort((a,b)=>( a < b? - 1:1 )).slice(0,depth)
+
+    let cummulative = 0n;
+    const bids:DepthLevel[] = bid_prices.map(price=>{
+        const level = book.bids.get(price)!
+        const size = [...level?.values()].reduce((s,o)=>s+remaining_qty(o),0n)
+        cummulative += size
+        return { price: price.toString(),size:size.toString(),total:cummulative.toString()}
+    })
+
+    cummulative = 0n
+    const asks: DepthLevel[] = ask_prices.map(price => {
+        const level = book.asks.get(price)!
+        const size = [...level.values()].reduce((s, o) => s + remaining_qty(o), 0n)
+        cummulative += size
+        return { price: price.toString(), size: size.toString(), total: cummulative.toString() }
+    })
+
+    return { bids, asks, seq: book.seq }
+}
+
+function round_to_tick(price:bigint,tick:bigint,roundup:boolean):bigint{
+    const rem = price% tick
+    if(rem==0n) return price
+    return roundup ? price + (tick - rem):price-rem
+}
+
 
 export function create_order(book:Orderbook,order:Order){
     const map =  order.side === "LONG" 
@@ -46,7 +92,7 @@ export function create_order(book:Orderbook,order:Order){
     book.orderIndex.set(order.id,{side:order.side,price:order.price})
     book.seq++
 }
-    
+        
 export function removeOrder(book:Orderbook,orderId:string){
     const entry =book.orderIndex.get(orderId)
     if(!entry) return
