@@ -35,10 +35,13 @@ async function initRedis(){
     }
     await redisSub.subscribe("order:results")
     
+    
     redisSub.on("message",(channel,message)=>{
         const data  =JSON.parse(message)
+        
         console.log("pubsub received:", data)
         console.log("pending orders:", [...pendingOrders.keys()])
+        
         const resolve = pendingOrders.get(data.orderId)
         if(resolve){
             resolve(data)
