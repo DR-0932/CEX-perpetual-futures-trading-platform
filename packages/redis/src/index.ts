@@ -14,18 +14,13 @@ export const redisSub = new Redis(redisUrl, {
     maxRetriesPerRequest: null,
 })
 
-export const redisLiq = new Redis(redisUrl, {
-    maxRetriesPerRequest: null,
-})
 export * from './schema.js'
 
 export const STREAM = {
     USER_REGISTRATION: 'stream:user_registration',
 } as const
 
-export const redisMarkPrice = new Redis(redisUrl, {
-    maxRetriesPerRequest: null,
-})
+
 
 export interface UserRegistrationPayload {
     userId:    string,
