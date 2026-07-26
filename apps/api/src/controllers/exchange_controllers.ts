@@ -4,6 +4,7 @@ import { redis } from '@cex/redis'
 import { pendingOrders } from "../index.js";
 import { v4 as uuid } from 'uuid'
 import { Status } from '@cex/db'    
+
 //types to be put in /packages/types and exported from there
 type onRamp = {
     userId:string,
@@ -155,7 +156,7 @@ export async function create_orders(req:Request,res:Response):Promise<void>{
     
     //cancel order
 export async function cancel_order(req: Request,res:Response):Promise<void>{
-    const userId = req.userId //will come from authmiddleware once i add it
+    const userId = req.userId 
     const orderId = req.params.id as string;
 
     const order =await prisma.orders.findFirst({
@@ -194,7 +195,7 @@ export async function cancel_order(req: Request,res:Response):Promise<void>{
         console.error("cancel_prder error",e)
         res.status(500).json({error:"internal server error" })
     }
-    //logic to unlock margins
+   
 }   
 
 export async function get_collateral(req: Request, res: Response): Promise<void> {
@@ -216,8 +217,3 @@ export async function get_collateral(req: Request, res: Response): Promise<void>
         res.status(500).json({ error: "internal server error" })
     }
 }
-//remove/exit position
-
-//check balance/get collateral: available && locked
-
-//
