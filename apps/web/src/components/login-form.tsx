@@ -3,6 +3,7 @@
 import { cn } from "@/lib/utils"
 import { useState } from "react";
 import { login_schema } from "@cex/validation";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button"
 import {
   Field,
@@ -13,15 +14,15 @@ import {
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 
-export function LoginForm({
-  className,
-  ...props
-}: React.ComponentProps<"form">) {
-   const [identifier, setIdentifier] = useState("");
+export function LoginForm({className,...props}: React.ComponentProps<"form">) {
+  const router = useRouter();
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
+  const [isLoading,setIsLoading] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+
+  async function handleSubmit(e: React.SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
     setMessage("");
 
@@ -32,20 +33,33 @@ export function LoginForm({
       return;
     }
 
-    const res = await fetch("http://localhost:3001/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(result.data),
-    });
+    setIsLoading(true)
+    try{
 
-    const data = await res.json();
-
-    if (!res.ok) {
-      setMessage(data.message || "Login failed");
-      return;
+      const res = await fetch("http://localhost:3000/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(result.data),
+      });
+  
+      const data = await res.json();
+      
+      if (!res.ok) {
+        setMessage(data.message || "Login failed");
+        return;
+      }
+      
+      localStorage.setItem("token",data.token)
+      router.push("/trade")
+  
+  
+      setMessage("Login successful!");
+    }catch{
+        setMessage("something went wrong")
     }
-
-    setMessage("Login successful!");
+    finally{
+      setIsLoading(false)
+    }
   }
 
 
@@ -105,7 +119,9 @@ export function LoginForm({
         )}
        
         <Field>
-          <Button type="submit">Login</Button>
+          <Button type="submit">
+            {isLoading  ? "logging in" : "Login"}
+          </Button>
         </Field>
         
         <FieldSeparator>Or continue with</FieldSeparator>
@@ -121,7 +137,7 @@ export function LoginForm({
         
           <FieldDescription className="text-center">
             Don&apos;t have an account?{" "}
-            <a href="#" className="underline underline-offset-4">
+            <a href="/signup" className="underline underline-offset-4">
               Sign up
             </a>
           </FieldDescription>

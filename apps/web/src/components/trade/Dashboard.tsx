@@ -9,7 +9,7 @@ type Collateral = {
 }
 
 export default function Dashboard() {
-    const [username, setUsername] = useState("")
+    const [user, setUser] = useState({username:"",name:"",email:""})
     const [collateral, setCollateral] = useState<Collateral>({ total: "0", available: "0", locked: "0" })
 
     useEffect(() => {
@@ -30,7 +30,7 @@ export default function Dashboard() {
             const userData = await userRes.json()
             const collateralData = await collateralRes.json()
 
-            setUsername(userData.username)
+            setUser(userData)
             setCollateral(collateralData)
         }
         fetchData()
@@ -38,7 +38,7 @@ export default function Dashboard() {
 
     return (
         <div className="flex items-center gap-6 text-sm">
-            <span className="text-muted-foreground">{username}</span>
+            <span className="">{user.username}</span>
             <div className="flex gap-4">
                 <span className="text-muted-foreground">Balance: <span className="text-green-400">{collateral.available}</span></span>
                 <span className="text-muted-foreground">Locked: <span className="text-yellow-400">{collateral.locked}</span></span>
