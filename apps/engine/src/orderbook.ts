@@ -9,7 +9,7 @@ export type Order = {
     margin:bigint,
     leverage:bigint,
 
-    side:"LONG"|"SHORT",
+    side:"BUY"|"SELL",
     createdAt:Date
 }
 
@@ -51,7 +51,7 @@ export function createOrderbook(): Orderbook{
 
 export function get_snapshot(book:Orderbook,depth=20):BookSnapShot{
     const bid_prices = [...book.bids.keys()].sort((a,b)=>( a > b? - 1:1 )).slice(0,depth)
-    const ask_prices = [...book.bids.keys()].sort((a,b)=>( a < b? - 1:1 )).slice(0,depth)
+    const ask_prices = [...book.asks.keys()].sort((a,b)=>( a < b? - 1:1 )).slice(0,depth)
 
     let cummulative = 0n;
     const bids:DepthLevel[] = bid_prices.map(price=>{
