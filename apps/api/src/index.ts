@@ -1,10 +1,9 @@
-import express, { json } from "express"
+import express from "express"
 import { authRouter } from "./routes/auth-routes.js";
 import { exchangeRouter } from "./routes/exchange-routes.js";
 import { redis,redisSub } from "@cex/redis";
 import "dotenv/config"
 import cors from "cors"
-
 
 const app = express();
 app.use(express.json());
