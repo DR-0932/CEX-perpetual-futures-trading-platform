@@ -74,7 +74,7 @@ export default function TradePage() {
           {/* Chart + Orderbook */}
           <div className="flex h-[65%] min-h-[400px] border-b overflow-hidden">
             <div className="flex-1 border-r overflow-hidden">
-              {/* <Chart /> */}
+              <Chart />
             </div>
 
             <div className="w-64 overflow-hidden">
