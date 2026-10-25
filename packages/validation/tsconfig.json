@@ -1,9 +1,70 @@
-{
-  "extends": "../../tsconfig.json",
-  "compilerOptions": {
-    "outDir": "./dist",
-    "rootDir": "./src",
-    "declaration": true
-  },
-  "include": ["src/**/*"]
-} 
+Here are **5 handcoding interview challenges** covering JavaScript, Node.js, React, TypeScript, and Python. Each problem is modeled after real technical interview rounds.
+
+---
+
+### 1. JavaScript: Custom Promise Implementation
+
+**Task:** Implement a simplified version of the native `Promise` class from scratch in plain JavaScript.
+
+* **Requirements:**
+* Must support `then()` and `catch()` chaining.
+* Must handle asynchronous resolution (e.g., inside `setTimeout`).
+* States must transition from `PENDING` $\rightarrow$ `FULFILLED` or `REJECTED` exactly once.
+
+
+
+---
+
+### 2. Node.js: Rate Limiter Middleware
+
+**Task:** Write an Express middleware function `createRateLimiter(maxRequests, windowMs)` that limits request frequency per IP address.
+
+* **Requirements:**
+* Track requests using an in-memory sliding window or token bucket mechanism.
+* If the request limit for an IP is exceeded within `windowMs`, return HTTP status `429 Too Many Requests` with a `Retry-After` header.
+* Clean up stale IP records to avoid memory leaks.
+
+
+
+---
+
+### 3. React: Infinite Scroll Hook
+
+**Task:** Build a custom React hook `useInfiniteScroll(fetchMore, hasMore)` that handles infinite scrolling without using third-party libraries.
+
+* **Requirements:**
+* Use the native `IntersectionObserver` API.
+* Return a `targetRef` to attach to a loading element at the bottom of the list.
+* Ensure it prevents duplicate calls while `loading` is active.
+
+
+
+---
+
+### 4. TypeScript: Deep Readonly Utility Type
+
+**Task:** Implement a custom generic type `DeepReadonly<T>` without using built-in utilities like `Readonly<T>`.
+
+* **Requirements:**
+* Make all nested properties of an object or array immutable.
+* Support primitive types, nested objects, and arrays.
+* Ensure functions within objects remain callable without mutation.
+
+
+
+---
+
+### 5. Python: LRU Cache
+
+**Task:** Implement an `LRUCache` class from scratch with $O(1)$ time complexity for both `get` and `put` operations.
+
+* **Requirements:**
+* `get(key)`: Returns value if key exists, otherwise `-1`. Mark key as recently used.
+* `put(key, value)`: Insert/update key-value pair. If capacity is reached, evict the least recently used item first.
+* Do not rely on Python's `collections.OrderedDict`.
+
+
+
+---
+
+Which one would you like to solve first? Share your code when ready, and we can review it line-by-line!
