@@ -2,22 +2,25 @@ import type {Request,Response} from "express"
 import { prisma } from '@cex/db'
 import bcrypt from 'bcrypt'
 import jwt from 'jsonwebtoken'
-
+import { signup_schema,login_schema } from "@cex/validation"
 
 export async function signup(req:Request,res:Response):Promise<void>{
-    const { username, password, name, email } = req.body;
+    const parsedBody = signup_schema.safeParse(req.body);
     
-    if (!username || !password || !name || !email) {
-        res.status(400).json({ error: "missing fields" })
-        return
+    if(!parsedBody.success){
+        res.status(400).json({error:"Validation Error"})
+        // console.log(parsedBody.error)
+        return;
     }
 
-    const hashed_password = await bcrypt.hash(password,10)
+    const {username,password,email,name} = parsedBody.data
     try{
+        const hashed_password = await bcrypt.hash(password,10)
         const user = await prisma.user.create({
-            data:{username,
-                password:hashed_password,
+            data:{
                 name,
+                username,
+                password:hashed_password,
                 email   
             }
         })
@@ -33,13 +36,14 @@ export async function signup(req:Request,res:Response):Promise<void>{
 
 
 export async function login(req:Request,res:Response):Promise<void>{
-    const {identifier,password} = req.body;  //add zod
+    const parsedBody = login_schema.safeParse(req.body);  //add zod
    
-    if(!identifier || !password) {
-        res.status(400).json({error:"missing fields"})
-        return
-    }    
-    
+    if(!parsedBody.success){
+        res.status(400).json({error:"Validation Error"})
+        // console.log(parsedBody.error)
+        return;
+    } 
+    const {identifier , password} = parsedBody.data
     try{
         const user = await prisma.user.findFirst({
                 where: {

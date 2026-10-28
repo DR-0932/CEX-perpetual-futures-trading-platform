@@ -11,14 +11,13 @@ export function authMiddleware(req:Request,res:Response,next:NextFunction){
     const token = auth_header.split(' ')[1];
     
     try{
-        const og_payload = jwt.verify(token,process.env.JWT_SECRET!) as {
+        const payload = jwt.verify(token,process.env.JWT_SECRET!) as {
             user:string
         }
         
-        req.userId = og_payload.user;
+        req.userId = payload.user;
         next()
     }catch(e){
         res.status(401).json({error:"invalid credentials"})
-    }
-    
+    }   
 }
