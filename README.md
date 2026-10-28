@@ -111,3 +111,6 @@ This runs each workspace package's build task through Turborepo. Individual serv
 ## Current scope
 
 This repository is an actively developed exchange prototype. It currently uses in-memory order books in the engine, and the mark price poller is configured for BTCUSDT. Review the order, collateral, and liquidation flows carefully before using it with real funds or exposing it to the public internet.
+
+
+## Folder structure. 
