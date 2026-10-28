@@ -1,4 +1,4 @@
-import { create_orders, cancel_order, on_ramp, get_positions, get_collateral, get_orders } from '../controllers/exchange_controllers.js'
+import { create_orders, cancel_order, on_ramp, get_positions, get_collateral, get_orders } from '../controllers/order_controllers.js'
 import { authMiddleware } from '../middleware/auth_middleware.js'
 import { Router }    from 'express'
 
