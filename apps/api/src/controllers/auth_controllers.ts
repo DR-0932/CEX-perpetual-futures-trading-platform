@@ -47,12 +47,9 @@ export async function login(req:Request,res:Response):Promise<void>{
     try{
         const user = await prisma.user.findFirst({
                 where: {
-                OR: [
-                    { username: identifier },
-                    { email: identifier }
-                ]
-            }
-        });
+                username: identifier,
+                }
+            });
 
         if(!user){
             res.status(401).json({error:"user not found"})

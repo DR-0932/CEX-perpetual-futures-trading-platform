@@ -5,5 +5,5 @@
     "rootDir": ".",
     "declaration": true
   },
-  "include": ["src/**/*", "generated/**/*"]
+  "include": ["src/**/*", "generated/**/*", "index.ts"]
 }

@@ -20,7 +20,7 @@ export const signup_schema = base_schema.extend({
     //photoId proof
 })
 
-export const createOrderSchema = z.object({
+export const create_order_schema = z.object({
     market: z.string().min(1),
     side: z.enum(["buy","sell"]),
     price: z.number().positive(),
@@ -30,7 +30,7 @@ export const createOrderSchema = z.object({
     reduceOnly: z.boolean().optional().default(false),
 });
 
-export const cancelOrderSchema = z.object({
+export const cancel_order_schema = z.object({
     market: z.string().min(1),
     orderId: z.string().min(1),
 });
@@ -39,5 +39,5 @@ export const cancelOrderSchema = z.object({
 export type loginInput = z.infer<typeof login_schema>
 export type signupInput  = z.infer<typeof signup_schema>
 
-export type createOrderSchema = z.infer<typeof createOrderSchema>
-export type cancelOrderSchema = z.infer<typeof cancelOrderSchema>
+export type createOrderSchema = z.infer<typeof create_order_schema>
+export type cancelOrderSchema = z.infer<typeof cancel_order_schema>
