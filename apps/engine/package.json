@@ -14,6 +14,8 @@
   "type": "module",
   "dependencies": {
     "@cex/redis": "workspace:*",
+    "@cex/shared": "workspace:*",
+    "@cex/db": "workspace:*",
     "sorted-btree": "^2.1.0"
   }
 }

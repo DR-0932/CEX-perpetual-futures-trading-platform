@@ -2,6 +2,46 @@ import { redis } from '@cex/redis'
 import { create_order, orderbooks ,Order} from './orderbook.js'
 import { match_orders } from './matching-engine.js'
 import { check_and_liqudate } from './liquidation.js'
+import {SPOT_INCOMING_STREAM,PERPS_INCOMING_STREAM,MARK_PRICE_STREAM,FUNDING_RATE_STREAM,ENGINE_CONSUMER_GROUP} from "@cex/shared"
+import type { PerpsEngineRequest, SpotEngineRequest } from "@cex/shared";
+
+
+async function ensureConsumerGroups() {
+  for (const stream of [SPOT_INCOMING_STREAM, PERPS_INCOMING_STREAM, MARK_PRICE_STREAM, FUNDING_RATE_STREAM]) {
+    try {
+      await redis.xgroup("CREATE", stream, ENGINE_CONSUMER_GROUP, "0", "MKSTREAM");
+    } catch (e: any) {
+      if (!e.message.includes("BUSYGROUP")) throw e;
+    }
+  }
+}
+
+async function processOrderMessage(
+  streamName: string,
+  msgId: string,
+  raw: Record<string, string>,
+) {
+  const request = JSON.parse(raw["payload"]!) as SpotEngineRequest | PerpsEngineRequest;
+  let payload: unknown;
+  try {
+    if (streamName === SPOT_INCOMING_STREAM) {
+      payload = handleEngineRequestForSpot(request);
+    } else {
+      payload = handleEngineRequestForPerps(request);
+    }
+  } catch (err) {
+    payload = { error: (err as Error).message };
+  }
+
+  await redis.publish(
+    backendResponseChannel(request.backendId),
+    JSON.stringify({ correlationId: request.correlationId, payload }),
+  );
+  await redis.xack(streamName, ENGINE_CONSUMER_GROUP, msgId);
+}
+
+
+
 
 function parseOrder( orderData: Record<string,string> ): Order {
     return{
