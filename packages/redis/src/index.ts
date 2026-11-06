@@ -1,11 +1,12 @@
 import {Redis} from 'ioredis';
 import "dotenv/config";
 
+const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+
 if (!process.env.REDIS_URL) {
   throw new Error("REDIS_URL is required");
 }
 
-const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
 
 export function makeRedisClient(clientName: string): Redis {
   const client = new Redis(redisUrl, {

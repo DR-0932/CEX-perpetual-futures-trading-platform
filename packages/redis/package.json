@@ -12,7 +12,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "dev": "tsc --watch"
+    "dev": "tsc --watch & node --watch dist/index.js"
   },
   "keywords": [],
   "author": "",
