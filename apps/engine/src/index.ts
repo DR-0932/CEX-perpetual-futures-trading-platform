@@ -1,10 +1,29 @@
-import { redis } from '@cex/redis'
-import { create_order, orderbooks ,Order} from './orderbook.js'
-import { match_orders } from './matching-engine.js'
-import { check_and_liqudate } from './liquidation.js'
-import {SPOT_INCOMING_STREAM,PERPS_INCOMING_STREAM,MARK_PRICE_STREAM,FUNDING_RATE_STREAM,ENGINE_CONSUMER_GROUP} from "@cex/shared"
+import "dotenv/config";
+import { redis } from "@cex/redis";
 import type { PerpsEngineRequest, SpotEngineRequest } from "@cex/shared";
+import {
+  SPOT_INCOMING_STREAM,
+  PERPS_INCOMING_STREAM,
+  MARK_PRICE_STREAM,
+  FUNDING_RATE_STREAM,
+  ENGINE_CONSUMER_GROUP,
+  ENGINE_CONSUMER_NAME,
+  backendResponseChannel,
+} from "@cex/shared";
+import { handleEngineRequestForPerps, handleEngineRequestForSpot } from "./handler.js";
+import { perpsExchangeStore } from "./store/perps_exchange_store.js";
+import { balanceStore } from "./store/balance_store.js";
+import { INSURANCE_FUND_USER_ID } from "./constants.js";
+import { restoreFromSnapshotAndReplay } from "./wal/replay.js";
+import { startSnapshotLoop } from "./wal/snapshot.js";
 
+function fieldsToObject(fields: string[]): Record<string, string> {
+  const obj: Record<string, string> = {};
+  for (let i = 0; i < fields.length; i += 2) {
+    obj[fields[i]!] = fields[i + 1]!;
+  }
+  return obj;
+}
 
 async function ensureConsumerGroups() {
   for (const stream of [SPOT_INCOMING_STREAM, PERPS_INCOMING_STREAM, MARK_PRICE_STREAM, FUNDING_RATE_STREAM]) {
@@ -40,168 +59,87 @@ async function processOrderMessage(
   await redis.xack(streamName, ENGINE_CONSUMER_GROUP, msgId);
 }
 
-
-
-
-function parseOrder( orderData: Record<string,string> ): Order {
-    return{
-        id:         orderData.id,
-        userId:     orderData.userId,
-        price:      BigInt(orderData.price),
-        quantity:   BigInt(orderData.quantity),
-        filled_qty: BigInt(orderData.filled_qty),
-        margin:     BigInt(orderData.margin),
-        leverage:   BigInt(orderData.leverage),
-        side:       orderData.side as "LONG" | "SHORT",
-        createdAt:  new Date(orderData.createdAt)
-    }
+function processMarkPrice(raw: Record<string, string>): void {
+  const market = raw["market"];
+  const price = Number(raw["price"]);
+  if (!market || !price || isNaN(price)) return;
+  perpsExchangeStore.updateMarkPrice(market, price);
 }
 
+async function drainPending() {
+  for (const stream of [SPOT_INCOMING_STREAM, PERPS_INCOMING_STREAM]) {
+    const result = (await redis.xreadgroup(
+      "GROUP", ENGINE_CONSUMER_GROUP, ENGINE_CONSUMER_NAME,
+      "COUNT", "100", "STREAMS", stream, "0",
+    )) as [string, [string, string[]][]][] | null;
+    if (!result) continue;
 
-async function processOrder( messageId:string,rawFields:string[] ) {
-    const orderData: Record<string,string> ={}    
-
-    for( let i =0;i<rawFields.length; i +=2 ) {
-        orderData[rawFields[i]]= rawFields[i+1]
-    }
-
-    const book = orderbooks.get(orderData.market)
-    if(!book){
-        await redis.xack( "orders", "engine_group", messageId )
-        return
-    }  
-
-    const order =  parseOrder(orderData)
-    create_order(book,order)
-    const fills = await match_orders(orderData.market)
-
-    if(fills.length === 0){
-        await redis.publish( "order:results", JSON.stringify ({
-            orderId:   orderData.id,
-            
-            market:    orderData.market,
-            
-            status:    "open"
-        }))
-    }
-    console.log("processing order:", orderData.id, "side:", orderData.side)
-    console.log("published order:results for", orderData.id)
-    await redis.xack( "orders", "engine_group", messageId )
-}
-
-async function processMarkPrice(messageId: string, rawFields: string[]) {
-    const data: Record<string, string> = {}
-    for (let i = 0; i < rawFields.length; i += 2) {
-        data[rawFields[i]] = rawFields[i + 1]
-    }
-    await check_and_liqudate(data.symbol, BigInt(data.price))
-    await redis.xack("markprice", "mark_price_group", messageId)
-}
-
-async function process_prices() {
-    console.log("process_prices started")
-    
-    const pending = await redis.xreadgroup(
-    
-        "GROUP",   "mark_price_group", "engine_worker",
-        
-        "COUNT",   "100",
-        
-        "STREAMS", "markprice",        "0"
-    
-    ) as [string, [string, string[]][]][]
-
-
-    if (pending?.[0]?.[1]?.length) {
-        for (const [messageId, rawFields] of pending[0][1]) {
-            await processMarkPrice(messageId, rawFields)
+    for (const [streamName, messages] of result) {
+      for (const [msgId, fields] of messages) {
+        const raw = fieldsToObject(fields);
+        const idleMs = Date.now() - parseInt(msgId.split("-")[0]!);
+        if (idleMs > 60_000) {
+          console.warn(`[engine] dead-lettering msgId=${msgId}`);
+          await redis.xack(streamName, ENGINE_CONSUMER_GROUP, msgId);
+          continue;
         }
+        await processOrderMessage(streamName, msgId, raw);
+      }
     }
-    console.log("pending messages processed, starting live loop")
+  }
+}
 
+function seedInsuranceFund(): void {
+  const seedAmt = Number(process.env.INSURANCE_FUND_SEED_USD) || 0;
+  if (seedAmt <= 0) return;
+  balanceStore.credit(INSURANCE_FUND_USER_ID, "USD", seedAmt);
+  console.log(`[engine] insurance fund seeded with ${seedAmt} USD`);
+}
 
-    while(true){
-        console.log("waiting for markprice message...")
-       
-        const result = await redis.xreadgroup(
-            "GROUP",        "mark_price_group",     "engine_worker",
-            
-            "COUNT",        "1",
-            
-            "BLOCK",        "0",
+async function main(): Promise<void> {
+  seedInsuranceFund();
+  await restoreFromSnapshotAndReplay();
+  await ensureConsumerGroups();
+  await drainPending();
+  startSnapshotLoop();
+  console.log("Engine listening on streams...");
 
-            "STREAMS",      "markprice",        ">",
-        )as [string,[string,string[]][]][]
-        
+  while (true) {
+    try {
+      const results = (await redis.xreadgroup(
+        "GROUP", ENGINE_CONSUMER_GROUP, ENGINE_CONSUMER_NAME,
+        "COUNT", "10",
+        "BLOCK", "0",
+        "STREAMS",
+        SPOT_INCOMING_STREAM, PERPS_INCOMING_STREAM, MARK_PRICE_STREAM, FUNDING_RATE_STREAM,
+        ">", ">", ">", ">",
+      )) as [string, [string, string[]][]][] | null;
+      if (!results) continue;
 
-        if(!result) continue;
-        const [messageId,rawFields] = result[0][1][0];
-        const data: Record<string,string> = {};
+      for (const [streamName, messages] of results) {
+        for (const [msgId, fields] of messages) {
+          const raw = fieldsToObject(fields);
 
-
-        for(let i = 0; i<rawFields.length;i+=2){
-            data[rawFields[i]] = rawFields[i+1];
+          if (streamName === MARK_PRICE_STREAM) {
+            processMarkPrice(raw);
+            await redis.xack(MARK_PRICE_STREAM, ENGINE_CONSUMER_GROUP, msgId);
+          } else if (streamName === FUNDING_RATE_STREAM) {
+            const market = raw["market"];
+            if (market) perpsExchangeStore.settleFunding(market);
+            await redis.xack(FUNDING_RATE_STREAM, ENGINE_CONSUMER_GROUP, msgId);
+          } else {
+            await processOrderMessage(streamName, msgId, raw);
+          }
         }
-        
-        await check_and_liqudate(data.symbol, BigInt(data.price))
-        await redis.xack("markprice","mark_price_group",messageId)
-
-        console.log("xack done")
+      }
+    } catch (err) {
+      console.error("engine loop error:", err);
+      await new Promise((r) => setTimeout(r, 1000));
     }
+  }
 }
 
-//creating markprice consumer group
-async function initRedis() {
-    try{
-        await redis.xgroup("CREATE", "markprice", "mark_price_group", "$","MKSTREAM")
-    }catch(e:any){
-        if(!e.message.includes("BUSYGROUP")) throw e
-    }
-}
-
-async function main() {
-    console.log("engine worker started monitoring orders..")
-    
-    await initRedis();
-    process_prices();
-    
-    //reads from engine group, order stream coming from api/index.ts
-    const pending = await redis.xreadgroup(
-        "GROUP",    "engine_group", "worker_1",
-        
-        "COUNT",    "100",
-        
-        "STREAMS",  "orders",       "0"  //read un-ack messages
-    
-    ) as [string, [string, string[]][]][]
-
-    if(pending){
-        for(const[messageId,rawFields] of pending[0][1]){
-            await processOrder(messageId,rawFields)
-        }
-    }
-
-    while(true) {
-            
-        //reads from engine group, order stream coming from api/index.ts
-        const result =await redis.xreadgroup(
-            "GROUP",    "engine_group",   "worker_1",
-           
-            "COUNT",    "1",
-           
-            "BLOCK",    "0",
-           
-            "STREAMS",  "orders",          ">" 
-        
-        ) as [string,[string,string[]][]][]
-        
-        if(!result) continue;
-        
-        const [messageId,rawfields] = result[0][1][0]
-        await processOrder(messageId,rawfields)
-    }
-
-
-}
-
-main().catch(console.error)
+main().catch((err) => {
+  console.error("engine crashed:", err);
+  process.exit(1);
+});

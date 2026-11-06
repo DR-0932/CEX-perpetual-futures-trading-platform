@@ -6,7 +6,7 @@ export interface PerpsOrder{
     market: string;
     side: Side;
     price: number;
-    lockerPricePerUnit: number;
+    lockedPricePerUnit: number;
     filledQuantity: number;
     quantity: number;
     orderType: OrderType;

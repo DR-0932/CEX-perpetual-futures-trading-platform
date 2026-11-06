@@ -303,6 +303,7 @@ class SpotExchangeStore {
       const amountToUnlock =
         amountToLock -
         order.fills.reduce((acc, fill) => acc + fill.price * fill.quantity, 0);
+      
       if (amountToUnlock > 0) {
         this.balanceStore.unlock(order.userId, quote, amountToUnlock);
       }
@@ -321,8 +322,10 @@ class SpotExchangeStore {
             order.quantity - order.filledQuantity,
           );
         }
+        
         writeOrder(order, "SPOT");
-        appendWAL({ type: "order_cancelled", exchange: "SPOT", market: input.market, userId: order.userId, data: order, timestamp: Date.now() }).catch(console.error);
+        appendWal({ type: "order_cancelled", exchange: "SPOT", market: input.market, userId: order.userId, data: order, timestamp: Date.now() }).catch(console.error);
+        
         publishUserEvent(order.userId, {
           type: "order_update",
           orderId: order.orderId,
@@ -332,6 +335,7 @@ class SpotExchangeStore {
           filledQuantity: order.filledQuantity,
           remainingQuantity: order.quantity - order.filledQuantity,
         });
+        
         this.snapshotSpotOb(input.market);
         this.flushBalances(order.userId, effectedMakerIds, base, quote);
         return order;
@@ -349,7 +353,9 @@ class SpotExchangeStore {
       });
     }
     writeOrder(order, "SPOT");
-    appendWAL({ type: "order_created", exchange: "SPOT", market: order.market, userId: order.userId, data: order, timestamp: Date.now() }).catch(console.error);
+   
+    appendWal({ type: "order_created", exchange: "SPOT", market: order.market, userId: order.userId, data: order, timestamp: Date.now() }).catch(console.error);
+   
     publishUserEvent(order.userId, {
       type: "order_update",
       orderId: order.orderId,
@@ -363,9 +369,238 @@ class SpotExchangeStore {
       filledQuantity: order.filledQuantity,
       remainingQuantity: order.quantity - order.filledQuantity,
     });
+    
     this.snapshotSpotOb(input.market);
     this.flushBalances(order.userId, effectedMakerIds, base, quote);
+    
     return order;
   }
-  
+
+  private flushBalances(
+    takerId: string,
+    makerIds: Set<string>,
+    base: string,
+    quote: string,
+  ): void {
+    for (const userId of [takerId, ...makerIds]) {
+      
+      const bal = this.balanceStore.getBalance(userId);
+      const lck = this.balanceStore.getLocked(userId);
+      
+      for (const asset of [base, quote]) {
+      
+        const available = bal.get(asset) ?? 0;
+        const locked = lck.get(asset) ?? 0;
+      
+        writeBalance(userId, asset, available, locked);
+      
+        appendWal({ type: "balance_snapshot", userId, data: { userId, asset, available, locked }, timestamp: Date.now() }).catch(console.error);
+      }
+    }
+  }  
+
+  cancelOrder(_market: string, orderId: string): SpotOrder {
+    // userID, amount, price
+    // 1213, 0.5, 30000
+
+    // DO: remove the resting order from the book
+    const order = this.spotOrders.get(orderId);
+    if (!order) {
+      throw new Error("order not found");
+    }
+    if (
+      order.status === "FILLED" ||
+      order.status === "CANCELLED" ||
+      order.status === "PARTIALLY_CANCELLED"
+    ) {
+      throw new Error(`order cannot be cancelled (status: ${order.status})`);
+    }
+    
+    // orderbook bids will have price and count
+    const side = order.side;
+    const inOrderBookSide = side === "buy" ? "bids" : "asks";
+    const ob = this.spotOrderBooks.get(order.market);
+    
+    if (!ob) {
+      throw new Error("market not found");
+    }
+    
+    const orders = ob[inOrderBookSide];
+    const index = orders.findIndex((o) => o.orderId === orderId);
+    
+    if (index === -1) {
+      throw new Error("order not found in order book");
+    }
+    
+    orders.splice(index, 1);
+    
+    if (order.filledQuantity === 0) {
+      order.status = "CANCELLED";
+    } else {
+      order.status = "PARTIALLY_CANCELLED";
+    }
+    
+    // DO: refund locked balance.
+    if (side === "buy") {
+      const quote = order.market.split("_")[1]!;
+      const amountToUnlock =
+        (order.quantity - order.filledQuantity) * order.price;
+      this.balanceStore.unlock(order.userId, quote, amountToUnlock);
+    
+    } else {
+      // for sell order we have locked the asset which we need to refund
+      const base = order.market.split("_")[0]!;
+      const amountToUnlock = order.quantity - order.filledQuantity;
+      this.balanceStore.unlock(order.userId, base, amountToUnlock);
+    }
+    
+    writeOrder(order, "SPOT");
+    
+    appendWal({ type: "order_cancelled", exchange: "SPOT", market: order.market, userId: order.userId, data: order, timestamp: Date.now() }).catch(console.error);
+    
+    // WAL balance snapshot for the unlock
+    const balMap = this.balanceStore.getBalance(order.userId);
+    const lckMap = this.balanceStore.getLocked(order.userId);
+    const asset = order.side === "buy" ? order.market.split("_")[1]! : order.market.split("_")[0]!;
+    
+    appendWal({ type: "balance_snapshot", userId: order.userId, data: { userId: order.userId, asset, available: balMap.get(asset) ?? 0, locked: lckMap.get(asset) ?? 0 }, timestamp: Date.now() }).catch(console.error);
+    
+    publishUserEvent(order.userId, {
+      type: "order_update",
+      orderId: order.orderId,
+      userId: order.userId,
+      market: order.market,
+      status: "cancelled",
+      filledQuantity: order.filledQuantity,
+      remainingQuantity: order.quantity - order.filledQuantity,
+    });
+    
+    this.snapshotSpotOb(order.market);
+    return order;
+  }
+
+  getOrder(orderId: string): SpotOrder {
+    const m = this.spotOrders.get(orderId);
+    if (!m) {
+      throw new Error("order not found");
+    }
+    return m;
+  }
+
+  getDepth(market: string): Depth {
+    // Aggregating in this AND THIS WILL BE accessed very more number of times compared to createOrder and cancelOrder(which will affect this)
+    // so this can be optimized by storing aggregated order book and updating it on every createOrder and cancelOrder
+    if (!SpotExchangeStore.SPOT_MARKET.includes(market)) {
+      throw new Error("invalid market");
+    }
+    
+    const m = this.spotOrderBooks.get(market);
+    
+    if (!m) {
+      throw new Error("market not found");
+    }
+    
+    // bids are sorted based on price-time priority,
+    // in bids we store order so we have in bids multipple same prices (sorted)
+    // we need to return price,count_remaining for each price level, so we need to convert order to price level
+
+    const bidLevels = new Map<number, number>();
+    for (const order of m.bids) {
+      const remainingQty = order.quantity - order.filledQuantity;
+      bidLevels.set(
+        order.price,
+        (bidLevels.get(order.price) || 0) + remainingQty,
+      );
+    }
+
+    const askLevels = new Map<number, number>();
+    for (const order of m.asks) {
+      const remainingQty = order.quantity - order.filledQuantity;
+      askLevels.set(
+        order.price,
+        (askLevels.get(order.price) || 0) + remainingQty,
+      );
+    }
+
+    const finalBids = Array.from(bidLevels.entries()).map(([price, count]) => ({
+      price,
+      count,
+    }));
+
+    const finalAsks = Array.from(askLevels.entries()).map(([price, count]) => ({
+      price,
+      count,
+    }));
+
+    const ans = { bids: finalBids, asks: finalAsks };
+    
+    return ans;
+  }
+
+
+  getUserBalance(userId: string): unknown {
+    const m = this.balanceStore.getBalance(userId);
+   
+    // return m;  as map is not serializable(bcoz => ) we need to convert it to object
+    return Object.fromEntries(m);
+  }
+
+  deposit(userId: string, asset: string, amount: number): unknown {
+    if (!SpotExchangeStore.SPOT_ASSETS.has(asset)) {
+      throw new Error("invalid asset");
+    }
+    // const currentBalance =this.balanceStore.getBalance(userId);
+    // balanceStore.getBalance(userId) || new Map<string, number>();
+    // currentBalance.set(asset, (currentBalance.get(asset) || 0) + amount);
+    // this.balance.set(userId, currentBalance);
+    this.balanceStore.credit(userId, asset, amount);
+    return this.getUserBalance(userId);
+  }  
+
+  serialize(): { orders: SpotOrder[]; orderBooks: Record<string, { bids: SpotOrder[]; asks: SpotOrder[] }> } {
+    const orderBooks: Record<string, { bids: SpotOrder[]; asks: SpotOrder[] }> = {};
+    for (const [k, v] of this.spotOrderBooks) {
+      orderBooks[k] = { bids: [...v.bids], asks: [...v.asks] };
+    }
+    return { orders: Array.from(this.spotOrders.values()), orderBooks };
+  }
+
+  restoreFromSnapshot(data: { orders: SpotOrder[]; orderBooks: Record<string, { bids: SpotOrder[]; asks: SpotOrder[] }> }): void {
+    this.spotOrders.clear();
+    
+    for (const o of data.orders) this.spotOrders.set(o.orderId, o);
+    
+    this.spotOrderBooks.clear();
+    
+    for (const [k, v] of Object.entries(data.orderBooks)) {
+      this.spotOrderBooks.set(k, { bids: [...v.bids], asks: [...v.asks] });
+    }
+  }
+
+  // Set or remove a spot order in internal maps  used during WAL replay.
+  walSetOrder(order: SpotOrder): void {
+    this.spotOrders.set(order.orderId, order);
+    
+    const ob = this.spotOrderBooks.get(order.market)
+      ?? this.spotOrderBooks.get(order.market.split("_")[0]!);
+    if (!ob) return;
+    
+    const sideKey: "bids" | "asks" = order.side === "buy" ? "bids" : "asks";
+    const arr = ob[sideKey];
+    const idx = arr.findIndex((o) => o.orderId === order.orderId);
+    
+    if (idx >= 0) arr.splice(idx, 1);
+    
+    if (order.status === "OPEN" || order.status === "PARTIALLY_FILLED") {
+      arr.push(order);
+      arr.sort((a, b) => {
+    
+        if (a.price === b.price) return a.timestamp - b.timestamp;
+        return order.side === "buy" ? b.price - a.price : a.price - b.price;
+      });
+    }
+  }
 }
+
+export const spotExchangeStore = new SpotExchangeStore(balanceStore);
+

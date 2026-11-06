@@ -1,6 +1,6 @@
 import {prisma} from "@cex/db";
 import  type {SpotOrder} from "../types/spot_exchange_store_types.js";
-import type { PerpsOrder,PerpsPosition } from "../types/perp_exchange_store.js";
+import type { PerpsOrder,PerpsPosition } from "../types/perp_exchange_store_types.js";
 import type { Fill } from "../types/common_types.js";
 
 const writeQueue: (()=> Promise<void>)[] = [];
