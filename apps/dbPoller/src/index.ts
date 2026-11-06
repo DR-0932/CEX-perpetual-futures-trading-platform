@@ -1,97 +1,44 @@
-import {redis} from "@cex/redis"
-import { prisma } from "@cex/db"
-import "dotenv/config"
+import "dotenv/config";
+import { readLatestSnapshot } from "./db-reader.js";
+import { writeSnapshotFile } from "./file-writer.js";
+import { publishSnapshot } from "./publisher.js";
 
-async function initRedis() {
-    try{
-        await redis.xgroup("CREATE", "fills", "poller_group", "$","MKSTREAM")
-    }catch(e:any){
-        if(!e.message.includes("BUSYGROUP")) throw e
+const MARKETS = (process.env.MARKETS || "BTC_USD,ETH_USD").split(",");
+const LIVE_INTERVAL_MS = Number(process.env.LIVE_INTERVAL_MS) || 1_000;
+const FILE_INTERVAL_MS = Number(process.env.FILE_INTERVAL_MS) || 900_000;
+
+// Short-interval loop: read latest DB snapshot and push to Redis orderbook channel
+// so WS clients get live orderbook updates even when no trades are occurring.
+async function liveLoop(): Promise<never> {
+  while (true) {
+    for (const market of MARKETS) {
+      try {
+        const snapshot = await readLatestSnapshot(market);
+        if (snapshot) await publishSnapshot(market, snapshot);
+      } catch (e) {
+        console.error(`[poller] live push error for ${market}:`, e);
+      }
     }
+    await new Promise<void>((r) => setTimeout(r, LIVE_INTERVAL_MS));
+  }
 }
 
-async function process_fills() {
-    while(true){
-        const result = await redis.xreadgroup(
-            "GROUP",        "poller_group",     "poller_worker",
-            
-            "COUNT",        "1",
-            
-            "BLOCK",        "0",
-            
-            "STREAMS",      "fills",             ">"
-        ) as [string, [string, string[]][]][]
-        
-        if(!result) continue
-
-        const [messageId,rawfileds] = result[0][1][0]
-        const data:Record<string,string> ={}
-
-        for(let i = 0;i<rawfileds.length; i += 2) {
-            data[rawfileds[i]] = rawfileds[i+1]
-        }
-
-        await prisma.fills.create({
-            data: {
-                market:          data.market,
-                price:           BigInt(data.fill_price),
-                quantity:        BigInt(data.fill_qty),
-                bidOrderId:      data.bid_orderId,
-                askOrderId:      data.ask_orderId,
-                bidUser:         { connect: { id: data.bid_userId } },
-                askUser:         { connect: { id: data.ask_userId } },
-                bidMargin:       BigInt(data.filled_bid_margin),
-                askMargin:       BigInt(data.filled_ask_margin),
-                bidRole:         "TAKER",
-                askRole:         "MAKER",
-                remainingBidQty: BigInt(data.remaining_bid_qty),
-                remainingAskQty: BigInt(data.remaining_ask_qty),
-                bidLeverage:     BigInt(data.bid_leverage),
-                askLeverage:     BigInt(data.ask_leverage),
-            } as any
-        });
-
-        await prisma.positions.create({
-            data: {
-                userId:            data.bid_userId,
-                symbol:            data.market,
-                market_id:         data.market,
-                side:              "LONG",
-                entry_price:       BigInt(data.fill_price),
-                quantity:          BigInt(data.fill_qty),
-                leverage:          BigInt(data.bid_leverage),
-                initial_margin:    BigInt(data.filled_bid_margin),
-                liquidation_price: BigInt(data.bid_liquidation_price),
-                status:            "OPEN",
-                type:              "LIMIT",
-                PnL:               0n
-            }
-        })
-
-        await prisma.positions.create({
-            data: {
-                userId:            data.ask_userId,
-                symbol:            data.market,
-                market_id:         data.market,
-                side:              "SHORT",
-                entry_price:       BigInt(data.fill_price),
-                quantity:          BigInt(data.fill_qty),
-                leverage:          BigInt(data.ask_leverage),
-                initial_margin:    BigInt(data.filled_ask_margin),
-                liquidation_price: BigInt(data.ask_liquidation_price),
-                status:            "OPEN",
-                type:              "LIMIT",
-                PnL:               0n
-            }
-        })
-        await redis.xack("fills","poller_group",messageId)
+// Long-interval loop: write timestamped snapshot files to disk for historical analysis.
+async function fileLoop(): Promise<never> {
+  while (true) {
+    for (const market of MARKETS) {
+      try {
+        const snapshot = await readLatestSnapshot(market);
+        if (snapshot) await writeSnapshotFile(market, snapshot);
+      } catch (e) {
+        console.error(`[poller] file write error for ${market}:`, e);
+      }
     }
+    await new Promise<void>((r) => setTimeout(r, FILE_INTERVAL_MS));
+  }
 }
 
-async function main(){
-    console.log("db poller started..")
-    await initRedis();
-    await process_fills();
-}
+console.log(`[poller] starting — markets: ${MARKETS.join(", ")}  live: ${LIVE_INTERVAL_MS}ms  file: ${FILE_INTERVAL_MS}ms`);
 
-main().catch(console.error)
+liveLoop().catch((e) => { console.error("[poller] live loop crashed:", e); process.exit(1); });
+fileLoop().catch((e) => { console.error("[poller] file loop crashed:", e); process.exit(1); });

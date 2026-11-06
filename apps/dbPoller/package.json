@@ -15,10 +15,13 @@
   "dependencies": {
     "@cex/db": "workspace:*",
     "@cex/redis": "workspace:*",
-    "dotenv": "^17.4.2"
+    "@cex/shared": "workspace:*",
+    "dotenv": "^17.4.2",
+    "pg": "^8.21.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "@types/pg": "^8.23.1",
     "typescript": "^5.0.0"
   }
 }
