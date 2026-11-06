@@ -11,7 +11,7 @@
   },
   "scripts": {
     "build":"prisma generate && tsc",
-    "dev":"tsc --watch",
+    "dev":"tsc --watch & node --watch dist/index.js",
     "db:generate": "prisma generate"
   },
   "keywords": [],
