@@ -1,7 +1,7 @@
 export type EngineRequestTypes = 
-| "create_orders"
-| "cancel_orders"
-| "get_orders"
+| "create_order"
+| "cancel_order"
+| "get_order"
 | "get_depth"
 | "get_position"
 | "get_user_position"
